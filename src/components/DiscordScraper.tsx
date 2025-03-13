@@ -2,12 +2,19 @@
 import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash, Download, Server, Key, Eye, EyeOff } from "lucide-react";
+import { Plus, Trash, Download, Server, Key, Eye, EyeOff, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface BotToken {
   id: string;
   token: string;
+}
+
+interface ScrapedUser {
+  id: string;
+  username: string;
 }
 
 export const DiscordScraper = () => {
@@ -15,6 +22,8 @@ export const DiscordScraper = () => {
   const [newToken, setNewToken] = useState('');
   const [serverId, setServerId] = useState('');
   const [showTokens, setShowTokens] = useState(false);
+  const [scrapedUsers, setScrapedUsers] = useState<ScrapedUser[]>([]);
+  const [message, setMessage] = useState('');
   const { toast } = useToast();
 
   const addToken = () => {
@@ -67,8 +76,33 @@ export const DiscordScraper = () => {
     // Aqui você implementará a lógica de scraping
   };
 
+  const sendMessages = async () => {
+    if (!message) {
+      toast({
+        title: "Erro",
+        description: "Por favor, escreva uma mensagem para enviar",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (scrapedUsers.length === 0) {
+      toast({
+        title: "Erro",
+        description: "Primeiro extraia os usuários do servidor",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Iniciando",
+      description: "Iniciando envio das mensagens...",
+    });
+    // Aqui você implementará a lógica de envio
+  };
+
   return (
-    <div className="glass rounded-lg p-6 space-y-6">
+    <div className="glass rounded-lg p-6 space-y-8">
       <div className="space-y-4">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <Server className="h-6 w-6" />
@@ -79,7 +113,17 @@ export const DiscordScraper = () => {
         </p>
       </div>
 
+      {/* Passo 1: Gerenciar Tokens */}
       <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Key className="h-5 w-5" />
+          <h3 className="text-lg font-semibold">Passo 1: Adicionar Tokens de Bot</h3>
+        </div>
+        <Alert>
+          <AlertDescription>
+            Crie seus tokens no painel Developer do Discord e certifique-se de que os bots estejam no servidor alvo.
+          </AlertDescription>
+        </Alert>
         <div className="flex gap-2">
           <div className="flex-1">
             <Input
@@ -127,7 +171,12 @@ export const DiscordScraper = () => {
         </div>
       </div>
 
+      {/* Passo 2: ID do Servidor */}
       <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Server className="h-5 w-5" />
+          <h3 className="text-lg font-semibold">Passo 2: Definir Servidor Alvo</h3>
+        </div>
         <div className="flex gap-2">
           <Input
             type="text"
@@ -136,11 +185,42 @@ export const DiscordScraper = () => {
             onChange={(e) => setServerId(e.target.value)}
             className="bg-secondary/50"
           />
-          <Button onClick={scrapeUsers}>
-            <Download className="h-4 w-4 mr-2" />
-            Extrair Usuários
-          </Button>
         </div>
+      </div>
+
+      {/* Passo 3: Extrair Usuários */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Download className="h-5 w-5" />
+          <h3 className="text-lg font-semibold">Passo 3: Extrair Usuários</h3>
+        </div>
+        <Button onClick={scrapeUsers} className="w-full">
+          <Download className="h-4 w-4 mr-2" />
+          Extrair Usuários do Servidor
+        </Button>
+        {scrapedUsers.length > 0 && (
+          <div className="text-sm text-muted-foreground">
+            {scrapedUsers.length} usuários extraídos
+          </div>
+        )}
+      </div>
+
+      {/* Passo 4: Enviar Mensagens */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Send className="h-5 w-5" />
+          <h3 className="text-lg font-semibold">Passo 4: Enviar Mensagens</h3>
+        </div>
+        <Textarea
+          placeholder="Digite a mensagem que será enviada para os usuários..."
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          className="bg-secondary/50 min-h-[100px]"
+        />
+        <Button onClick={sendMessages} className="w-full" variant="secondary">
+          <Send className="h-4 w-4 mr-2" />
+          Enviar Mensagens ({scrapedUsers.length} usuários)
+        </Button>
       </div>
     </div>
   );
