@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 interface BotToken {
   id: string;
   token: string;
+  visible: boolean;
 }
 
 interface ScrapedUser {
@@ -34,12 +35,18 @@ export const DiscordScraper = () => {
       });
       return;
     }
-    setTokens([...tokens, { id: Date.now().toString(), token: newToken }]);
+    setTokens([...tokens, { id: Date.now().toString(), token: newToken, visible: false }]);
     setNewToken('');
     toast({
       title: "Sucesso",
       description: "Token adicionado com sucesso",
     });
+  };
+
+  const toggleTokenVisibility = (id: string) => {
+    setTokens(tokens.map(token => 
+      token.id === id ? { ...token, visible: !token.visible } : token
+    ));
   };
 
   const removeToken = (id: string) => {
@@ -112,7 +119,6 @@ export const DiscordScraper = () => {
         </p>
       </div>
 
-      {/* Passo 1: Gerenciar Tokens */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Key className="h-5 w-5" />
@@ -158,22 +164,30 @@ export const DiscordScraper = () => {
                 </span>
                 <Key className="h-4 w-4" />
                 <span className="font-mono">
-                  {showTokens ? token.token : token.token.replace(/./g, '•')}
+                  {token.visible ? token.token : token.token.replace(/./g, '•')}
                 </span>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => removeToken(token.id)}
-              >
-                <Trash className="h-4 w-4 text-destructive-foreground" />
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => toggleTokenVisibility(token.id)}
+                >
+                  {token.visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeToken(token.id)}
+                >
+                  <Trash className="h-4 w-4 text-destructive-foreground" />
+                </Button>
+              </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Passo 2: ID do Servidor */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Server className="h-5 w-5" />
@@ -190,7 +204,6 @@ export const DiscordScraper = () => {
         </div>
       </div>
 
-      {/* Passo 3: Extrair Usuários */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Download className="h-5 w-5" />
@@ -207,7 +220,6 @@ export const DiscordScraper = () => {
         )}
       </div>
 
-      {/* Passo 4: Enviar Mensagens */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Send className="h-5 w-5" />
