@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,12 +147,15 @@ export const DiscordScraper = () => {
         </div>
 
         <div className="space-y-2">
-          {tokens.map((token) => (
+          {tokens.map((token, index) => (
             <div
               key={token.id}
               className="flex items-center justify-between bg-secondary/30 p-3 rounded-md"
             >
               <div className="flex items-center gap-2">
+                <span className="flex items-center justify-center bg-primary/10 text-primary rounded-full w-6 h-6 text-sm font-medium">
+                  {index + 1}
+                </span>
                 <Key className="h-4 w-4" />
                 <span className="font-mono">
                   {showTokens ? token.token : token.token.replace(/./g, '•')}
