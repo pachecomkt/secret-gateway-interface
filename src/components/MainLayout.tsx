@@ -1,8 +1,8 @@
-
 import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Menu, ChevronLeft, Home, Settings, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DiscordScraper } from './DiscordScraper';
 
 export const MainLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -64,12 +64,7 @@ export const MainLayout = () => {
         "flex-1 transition-all duration-300 p-6",
         sidebarOpen ? "ml-64" : "ml-20"
       )}>
-        <div className="glass rounded-lg p-6">
-          <h2 className="text-2xl font-bold mb-4">Bem-vindo!</h2>
-          <p className="text-muted-foreground">
-            Esta é a área principal do seu painel. Você pode começar a adicionar conteúdo aqui.
-          </p>
-        </div>
+        <DiscordScraper />
       </main>
     </div>
   );
