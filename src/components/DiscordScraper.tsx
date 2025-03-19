@@ -1,10 +1,33 @@
+
 import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash, Download, Server, Key, Eye, EyeOff, Send } from "lucide-react";
+import { Plus, Trash, Download, Server, Key, Eye, EyeOff, Send, Save, List } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface BotToken {
   id: string;
@@ -17,6 +40,13 @@ interface ScrapedUser {
   username: string;
 }
 
+interface SavedList {
+  id: string;
+  name: string;
+  users: ScrapedUser[];
+  createdAt: string;
+}
+
 export const DiscordScraper = () => {
   const [tokens, setTokens] = useState<BotToken[]>([]);
   const [newToken, setNewToken] = useState('');
@@ -24,6 +54,10 @@ export const DiscordScraper = () => {
   const [showTokens, setShowTokens] = useState(false);
   const [scrapedUsers, setScrapedUsers] = useState<ScrapedUser[]>([]);
   const [message, setMessage] = useState('');
+  const [savedLists, setSavedLists] = useState<SavedList[]>([]);
+  const [newListName, setNewListName] = useState('');
+  const [selectedListId, setSelectedListId] = useState<string | null>(null);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const { toast } = useToast();
 
   const addToken = () => {
@@ -80,6 +114,67 @@ export const DiscordScraper = () => {
       description: "Iniciando extração de usuários...",
     });
     // Aqui você implementará a lógica de scraping
+
+    // Mock data for now
+    const mockUsers: ScrapedUser[] = Array(15).fill(null).map((_, i) => ({
+      id: `user_${i+1}`,
+      username: `discord_user_${i+1}`
+    }));
+    
+    setScrapedUsers(mockUsers);
+    setSaveDialogOpen(true);
+  };
+
+  const saveUserList = () => {
+    if (!newListName) {
+      toast({
+        title: "Erro",
+        description: "Por favor, dê um nome para sua lista",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const newList: SavedList = {
+      id: Date.now().toString(),
+      name: newListName,
+      users: [...scrapedUsers],
+      createdAt: new Date().toLocaleString(),
+    };
+    
+    setSavedLists([...savedLists, newList]);
+    setNewListName('');
+    setSaveDialogOpen(false);
+    
+    toast({
+      title: "Sucesso",
+      description: `Lista "${newList.name}" salva com ${scrapedUsers.length} usuários`,
+    });
+  };
+
+  const loadList = (listId: string) => {
+    const list = savedLists.find(list => list.id === listId);
+    if (list) {
+      setScrapedUsers(list.users);
+      setSelectedListId(listId);
+      
+      toast({
+        title: "Lista carregada",
+        description: `Lista "${list.name}" com ${list.users.length} usuários`,
+      });
+    }
+  };
+
+  const deleteList = (listId: string) => {
+    setSavedLists(savedLists.filter(list => list.id !== listId));
+    if (selectedListId === listId) {
+      setSelectedListId(null);
+    }
+    
+    toast({
+      title: "Lista removida",
+      description: "A lista foi removida com sucesso",
+    });
   };
 
   const sendMessages = async () => {
@@ -94,7 +189,7 @@ export const DiscordScraper = () => {
     if (scrapedUsers.length === 0) {
       toast({
         title: "Erro",
-        description: "Primeiro extraia os usuários do servidor",
+        description: "Primeiro extraia ou carregue uma lista de usuários",
         variant: "destructive",
       });
       return;
@@ -205,19 +300,90 @@ export const DiscordScraper = () => {
       </div>
 
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Download className="h-5 w-5" />
-          <h3 className="text-lg font-semibold">Passo 3: Extrair Usuários</h3>
-        </div>
-        <Button onClick={scrapeUsers} className="w-full">
-          <Download className="h-4 w-4 mr-2" />
-          Extrair Usuários do Servidor
-        </Button>
-        {scrapedUsers.length > 0 && (
-          <div className="text-sm text-muted-foreground">
-            {scrapedUsers.length} usuários extraídos
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Download className="h-5 w-5" />
+            <h3 className="text-lg font-semibold">Passo 3: Gerenciar Listas de Usuários</h3>
           </div>
-        )}
+          <Button onClick={scrapeUsers} variant="default" className="bg-blue-600 hover:bg-blue-700">
+            <Download className="h-4 w-4 mr-2" />
+            Extrair Novos Usuários
+          </Button>
+        </div>
+        
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="md:w-1/2 space-y-2">
+            <div className="font-medium text-sm">Listas Salvas</div>
+            {savedLists.length === 0 ? (
+              <div className="text-sm text-muted-foreground p-4 border border-dashed rounded-md text-center">
+                Nenhuma lista salva
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
+                {savedLists.map(list => (
+                  <div 
+                    key={list.id}
+                    className={`flex items-center justify-between p-3 rounded-md border ${
+                      selectedListId === list.id ? 'bg-primary/10 border-primary/30' : 'bg-secondary/20'
+                    }`}
+                  >
+                    <div className="flex flex-col">
+                      <span className="font-medium">{list.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {list.users.length} usuários • {list.createdAt}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => loadList(list.id)}
+                      >
+                        Usar
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => deleteList(list.id)}
+                      >
+                        <Trash className="h-4 w-4 text-destructive-foreground" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          <div className="md:w-1/2 space-y-2">
+            <div className="font-medium text-sm">Usuários da Lista Atual</div>
+            <div className="p-4 border rounded-md bg-secondary/10 max-h-[200px] overflow-y-auto">
+              {scrapedUsers.length === 0 ? (
+                <div className="text-center text-muted-foreground text-sm">
+                  Nenhum usuário extraído ainda
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between text-xs text-muted-foreground mb-2 px-2">
+                    <span>ID</span>
+                    <span>Nome de Usuário</span>
+                  </div>
+                  {scrapedUsers.map(user => (
+                    <div key={user.id} className="flex justify-between text-sm py-1 px-2 hover:bg-secondary/20 rounded">
+                      <span className="font-mono">{user.id}</span>
+                      <span>{user.username}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+            {scrapedUsers.length > 0 && (
+              <div className="text-sm text-right">
+                {scrapedUsers.length} usuários disponíveis
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="space-y-4">
@@ -236,6 +402,35 @@ export const DiscordScraper = () => {
           Enviar Mensagens ({scrapedUsers.length} usuários)
         </Button>
       </div>
+
+      {/* Dialog for saving a new list */}
+      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Salvar Lista de Usuários</DialogTitle>
+            <DialogDescription>
+              Você extraiu {scrapedUsers.length} usuários. Dê um nome para salvar esta lista para uso futuro.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              placeholder="Nome da lista (ex: Servidor Gaming, Comunidade XYZ)"
+              value={newListName}
+              onChange={(e) => setNewListName(e.target.value)}
+              className="w-full"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={saveUserList} className="gap-2">
+              <Save className="h-4 w-4" />
+              Salvar Lista
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
