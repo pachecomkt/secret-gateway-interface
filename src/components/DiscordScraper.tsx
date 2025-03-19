@@ -1,11 +1,12 @@
-
 import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash, Download, Server, Key, Eye, EyeOff, Send, Save, List } from "lucide-react";
+import { Plus, Trash, Download, Server, Key, Eye, EyeOff, Send, Save, List, ArrowRight, Check, X, MessageCircle, Activity, Timer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -47,6 +48,14 @@ interface SavedList {
   createdAt: string;
 }
 
+interface MessageStatus {
+  userId: string;
+  username: string;
+  status: 'pending' | 'sending' | 'success' | 'failed';
+  timestamp: string;
+  error?: string;
+}
+
 export const DiscordScraper = () => {
   const [tokens, setTokens] = useState<BotToken[]>([]);
   const [newToken, setNewToken] = useState('');
@@ -58,6 +67,14 @@ export const DiscordScraper = () => {
   const [newListName, setNewListName] = useState('');
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  
+  // New state for broadcast tracking
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [broadcastStartTime, setBroadcastStartTime] = useState<Date | null>(null);
+  const [messageStatuses, setMessageStatuses] = useState<MessageStatus[]>([]);
+  const [completedMessages, setCompletedMessages] = useState(0);
+  const [broadcastDialogOpen, setBroadcastDialogOpen] = useState(false);
+  
   const { toast } = useToast();
 
   const addToken = () => {
@@ -199,7 +216,81 @@ export const DiscordScraper = () => {
       title: "Iniciando",
       description: "Iniciando envio das mensagens...",
     });
-    // Aqui você implementará a lógica de envio
+    
+    // Set broadcasting state
+    setIsBroadcasting(true);
+    setBroadcastStartTime(new Date());
+    setBroadcastDialogOpen(true);
+    setCompletedMessages(0);
+    
+    // Initialize all users as pending
+    const initialStatuses: MessageStatus[] = scrapedUsers.map(user => ({
+      userId: user.id,
+      username: user.username,
+      status: 'pending',
+      timestamp: new Date().toISOString()
+    }));
+    setMessageStatuses(initialStatuses);
+    
+    // Simulate sending messages with random success/fail
+    for (let i = 0; i < scrapedUsers.length; i++) {
+      // Update status to sending
+      setMessageStatuses(prev => prev.map((status, idx) => 
+        idx === i ? { ...status, status: 'sending', timestamp: new Date().toISOString() } : status
+      ));
+      
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+      
+      // Randomly succeed or fail (80% success rate for demo)
+      const success = Math.random() > 0.2;
+      
+      // Update status based on success
+      setMessageStatuses(prev => prev.map((status, idx) => 
+        idx === i ? { 
+          ...status, 
+          status: success ? 'success' : 'failed',
+          error: success ? undefined : 'Usuário não aceita mensagens diretas',
+          timestamp: new Date().toISOString() 
+        } : status
+      ));
+      
+      // Increment completed counter
+      setCompletedMessages(prev => prev + 1);
+    }
+    
+    // Keep the dialog open to show results
+    // User can close manually
+  };
+  
+  const stopBroadcast = () => {
+    setIsBroadcasting(false);
+    setBroadcastStartTime(null);
+    toast({
+      title: "Divulgação interrompida",
+      description: "O envio de mensagens foi interrompido.",
+    });
+  };
+  
+  const getElapsedTimeString = () => {
+    if (!broadcastStartTime) return '00:00';
+    const elapsed = new Date().getTime() - broadcastStartTime.getTime();
+    const minutes = Math.floor(elapsed / 60000);
+    const seconds = Math.floor((elapsed % 60000) / 1000);
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+  
+  const getProgressPercentage = () => {
+    if (scrapedUsers.length === 0) return 0;
+    return Math.round((completedMessages / scrapedUsers.length) * 100);
+  };
+  
+  const getStatusCounts = () => {
+    return {
+      success: messageStatuses.filter(s => s.status === 'success').length,
+      failed: messageStatuses.filter(s => s.status === 'failed').length,
+      pending: messageStatuses.filter(s => s.status === 'pending' || s.status === 'sending').length
+    };
   };
 
   return (
@@ -397,7 +488,12 @@ export const DiscordScraper = () => {
           onChange={(e) => setMessage(e.target.value)}
           className="bg-secondary/50 min-h-[100px]"
         />
-        <Button onClick={sendMessages} className="w-full" variant="secondary">
+        <Button 
+          onClick={sendMessages} 
+          className="w-full" 
+          variant="secondary" 
+          disabled={isBroadcasting}
+        >
           <Send className="h-4 w-4 mr-2" />
           Enviar Mensagens ({scrapedUsers.length} usuários)
         </Button>
@@ -428,6 +524,145 @@ export const DiscordScraper = () => {
               <Save className="h-4 w-4" />
               Salvar Lista
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Dialog for broadcasting status */}
+      <Dialog open={broadcastDialogOpen} onOpenChange={setBroadcastDialogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Acompanhamento de Envio em Tempo Real</DialogTitle>
+            <DialogDescription>
+              Monitore o progresso de envio das mensagens para os usuários.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-6">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <Card>
+                <CardHeader className="py-2 px-4">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Progresso</CardTitle>
+                </CardHeader>
+                <CardContent className="py-0 px-4 pb-4">
+                  <div className="text-2xl font-bold">
+                    {completedMessages}/{scrapedUsers.length}
+                  </div>
+                  <Progress value={getProgressPercentage()} className="h-2 mt-2" />
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="py-2 px-4">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Tempo Decorrido</CardTitle>
+                </CardHeader>
+                <CardContent className="py-0 px-4 pb-4 flex items-center gap-2">
+                  <Timer className="h-5 w-5 text-muted-foreground" />
+                  <div className="text-2xl font-bold font-mono">{getElapsedTimeString()}</div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="py-2 px-4">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Enviados com Sucesso</CardTitle>
+                </CardHeader>
+                <CardContent className="py-0 px-4 pb-4 flex items-center gap-2">
+                  <Check className="h-5 w-5 text-green-500" />
+                  <div className="text-2xl font-bold text-green-500">{getStatusCounts().success}</div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="py-2 px-4">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Falhas</CardTitle>
+                </CardHeader>
+                <CardContent className="py-0 px-4 pb-4 flex items-center gap-2">
+                  <X className="h-5 w-5 text-red-500" />
+                  <div className="text-2xl font-bold text-red-500">{getStatusCounts().failed}</div>
+                </CardContent>
+              </Card>
+            </div>
+            
+            {/* Real-time Message Log */}
+            <Card>
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-md">Log de Mensagens</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="max-h-[300px] overflow-y-auto">
+                  <table className="w-full">
+                    <thead className="bg-secondary/50 sticky top-0">
+                      <tr className="text-xs text-left text-muted-foreground">
+                        <th className="py-2 px-4 font-medium">Status</th>
+                        <th className="py-2 px-4 font-medium">Usuário</th>
+                        <th className="py-2 px-4 font-medium">ID</th>
+                        <th className="py-2 px-4 font-medium">Horário</th>
+                        <th className="py-2 px-4 font-medium">Detalhes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {messageStatuses.map((status) => (
+                        <tr key={status.userId} className="border-t border-border">
+                          <td className="py-2 px-4">
+                            {status.status === 'pending' && (
+                              <span className="flex items-center gap-1 text-muted-foreground">
+                                <div className="w-2 h-2 rounded-full bg-muted-foreground"></div>
+                                Pendente
+                              </span>
+                            )}
+                            {status.status === 'sending' && (
+                              <span className="flex items-center gap-1 text-blue-500 animate-pulse">
+                                <Activity className="h-3 w-3" />
+                                Enviando
+                              </span>
+                            )}
+                            {status.status === 'success' && (
+                              <span className="flex items-center gap-1 text-green-500">
+                                <Check className="h-3 w-3" />
+                                Enviado
+                              </span>
+                            )}
+                            {status.status === 'failed' && (
+                              <span className="flex items-center gap-1 text-red-500">
+                                <X className="h-3 w-3" />
+                                Falha
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 px-4 max-w-[150px] truncate">
+                            {status.username}
+                          </td>
+                          <td className="py-2 px-4 font-mono text-xs text-muted-foreground">
+                            {status.userId}
+                          </td>
+                          <td className="py-2 px-4 text-xs text-muted-foreground">
+                            {new Date(status.timestamp).toLocaleTimeString()}
+                          </td>
+                          <td className="py-2 px-4 text-xs">
+                            {status.error && <span className="text-red-500">{status.error}</span>}
+                            {status.status === 'success' && <span className="text-green-500">Mensagem entregue</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          
+          <DialogFooter>
+            {isBroadcasting ? (
+              <Button variant="destructive" onClick={stopBroadcast}>
+                <X className="h-4 w-4 mr-2" />
+                Interromper Envio
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={() => setBroadcastDialogOpen(false)}>
+                Fechar
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
