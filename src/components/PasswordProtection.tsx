@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Lock } from "lucide-react";
-import { validatePassword } from "@/services/passwordService";
+import { validatePassword, checkPasswordStatus } from "@/services/passwordService";
 import { useToast } from "@/hooks/use-toast";
 
 interface PasswordProtectionProps {
@@ -13,6 +13,7 @@ interface PasswordProtectionProps {
 export const PasswordProtection = ({ onUnlock }: PasswordProtectionProps) => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -21,13 +22,20 @@ export const PasswordProtection = ({ onUnlock }: PasswordProtectionProps) => {
     
     if (!password.trim()) {
       setError(true);
+      setErrorMessage("Por favor, digite uma senha");
       return;
     }
     
     setIsLoading(true);
     
     try {
+      // Primeiro, verificar o status da senha
+      const passwordStatus = await checkPasswordStatus(password);
+      console.log('Status da senha:', passwordStatus);
+      
+      // Verificar a validação normal
       const isValid = await validatePassword(password);
+      console.log('Senha válida:', isValid);
       
       if (isValid) {
         toast({
@@ -37,13 +45,22 @@ export const PasswordProtection = ({ onUnlock }: PasswordProtectionProps) => {
         });
         onUnlock();
         setError(false);
-      } else {
+      } else if (passwordStatus.exists && passwordStatus.expired) {
         toast({
           title: "Acesso negado",
-          description: "Senha incorreta ou expirada",
+          description: "Esta senha está expirada",
           variant: "destructive",
         });
         setError(true);
+        setErrorMessage("Senha expirada");
+      } else {
+        toast({
+          title: "Acesso negado",
+          description: "Senha incorreta",
+          variant: "destructive",
+        });
+        setError(true);
+        setErrorMessage("Senha incorreta");
       }
     } catch (err) {
       console.error("Erro ao validar senha:", err);
@@ -53,6 +70,7 @@ export const PasswordProtection = ({ onUnlock }: PasswordProtectionProps) => {
         variant: "destructive",
       });
       setError(true);
+      setErrorMessage("Erro interno. Tente novamente.");
     } finally {
       setIsLoading(false);
     }
@@ -80,7 +98,7 @@ export const PasswordProtection = ({ onUnlock }: PasswordProtectionProps) => {
               disabled={isLoading}
             />
             {error && (
-              <p className="text-sm text-red-500">Senha incorreta ou expirada</p>
+              <p className="text-sm text-red-500">{errorMessage}</p>
             )}
           </div>
           <Button 

@@ -1,14 +1,6 @@
 
 import { supabase } from "@/integrations/supabase/client";
-
-export interface TemporaryPassword {
-  id: string;
-  password: string;
-  description: string | null;
-  created_at: string;
-  expires_at: string;
-  created_by: string | null;
-}
+import { TemporaryPassword } from "@/types/database.types";
 
 export const createTemporaryPassword = async (
   password: string,
@@ -37,6 +29,8 @@ export const createTemporaryPassword = async (
 };
 
 export const validatePassword = async (password: string): Promise<boolean> => {
+  console.log('Validando senha:', password);
+  
   const { data, error } = await supabase
     .from('temporary_passwords')
     .select()
@@ -49,7 +43,36 @@ export const validatePassword = async (password: string): Promise<boolean> => {
     return false;
   }
   
+  console.log('Resultado da validação:', !!data, data);
   return !!data;
+};
+
+export const checkPasswordStatus = async (password: string): Promise<{exists: boolean; expired: boolean}> => {
+  const now = new Date().toISOString();
+  
+  // Verificar se a senha existe independentemente da expiração
+  const { data: passwordData, error: passwordError } = await supabase
+    .from('temporary_passwords')
+    .select()
+    .eq('password', password)
+    .maybeSingle();
+  
+  if (passwordError) {
+    console.error('Erro ao verificar senha:', passwordError);
+    return { exists: false, expired: false };
+  }
+  
+  if (!passwordData) {
+    return { exists: false, expired: false };
+  }
+  
+  // Verificar se está expirada
+  const isExpired = new Date(passwordData.expires_at) < new Date();
+  
+  return { 
+    exists: true, 
+    expired: isExpired 
+  };
 };
 
 export const getTemporaryPasswords = async (): Promise<TemporaryPassword[]> => {
