@@ -14,7 +14,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Trash, Plus, Clock } from "lucide-react";
-import { TemporaryPassword, createTemporaryPassword, getTemporaryPasswords, deleteTemporaryPassword } from "@/services/passwordService";
+import { createTemporaryPassword, getTemporaryPasswords, deleteTemporaryPassword } from "@/services/passwordService";
+import { TemporaryPassword } from "@/types/database.types";
 import { useToast } from "@/hooks/use-toast";
 
 export const PasswordManager = () => {
