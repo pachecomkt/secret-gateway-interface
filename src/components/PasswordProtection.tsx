@@ -7,7 +7,7 @@ import { validatePassword, checkPasswordStatus } from "@/services/passwordServic
 import { useToast } from "@/hooks/use-toast";
 
 interface PasswordProtectionProps {
-  onUnlock: () => void;
+  onUnlock: (isAdmin: boolean) => void;
 }
 
 export const PasswordProtection = ({ onUnlock }: PasswordProtectionProps) => {
@@ -40,10 +40,10 @@ export const PasswordProtection = ({ onUnlock }: PasswordProtectionProps) => {
       if (isValid) {
         toast({
           title: "Acesso concedido",
-          description: "Senha correta, seja bem-vindo!",
+          description: passwordStatus.isAdmin ? "Bem-vindo, Administrador!" : "Senha correta, seja bem-vindo!",
           variant: "default",
         });
-        onUnlock();
+        onUnlock(passwordStatus.isAdmin);
         setError(false);
       } else if (passwordStatus.exists && passwordStatus.expired) {
         toast({

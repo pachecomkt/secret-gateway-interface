@@ -38,7 +38,7 @@ export const createTemporaryPassword = async (
 export const validatePassword = async (password: string): Promise<boolean> => {
   console.log('Validando senha:', password);
   
-  // Se a senha for "Admin@2024Sec!", aceitamos como válida para fins de emergência/desenvolvimento
+  // Se a senha for "Admin@2024Sec!", aceitamos como válida para fins de administração
   if (password === "Admin@2024Sec!") {
     console.log('Usando credencial de administrador');
     return true;
@@ -60,10 +60,10 @@ export const validatePassword = async (password: string): Promise<boolean> => {
   return !!data;
 };
 
-export const checkPasswordStatus = async (password: string): Promise<{exists: boolean; expired: boolean}> => {
-  // Se a senha for "Admin@2024Sec!", consideramos como válida para fins de emergência/desenvolvimento
+export const checkPasswordStatus = async (password: string): Promise<{exists: boolean; expired: boolean; isAdmin: boolean}> => {
+  // Se a senha for "Admin@2024Sec!", consideramos como administrador
   if (password === "Admin@2024Sec!") {
-    return { exists: true, expired: false };
+    return { exists: true, expired: false, isAdmin: true };
   }
   
   const now = new Date().toISOString();
@@ -77,11 +77,11 @@ export const checkPasswordStatus = async (password: string): Promise<{exists: bo
   
   if (passwordError) {
     console.error('Erro ao verificar senha:', passwordError);
-    return { exists: false, expired: false };
+    return { exists: false, expired: false, isAdmin: false };
   }
   
   if (!passwordData) {
-    return { exists: false, expired: false };
+    return { exists: false, expired: false, isAdmin: false };
   }
   
   // Verificar se está expirada
@@ -89,7 +89,8 @@ export const checkPasswordStatus = async (password: string): Promise<{exists: bo
   
   return { 
     exists: true, 
-    expired: isExpired 
+    expired: isExpired,
+    isAdmin: false 
   };
 };
 
