@@ -50,6 +50,12 @@ export const PasswordCreationForm = ({ onPasswordCreated }: PasswordCreationForm
         setDescription("");
         setExpiresIn("24");
         onPasswordCreated();
+      } else {
+        toast({
+          title: "Erro",
+          description: "Não foi possível criar a senha temporária",
+          variant: "destructive",
+        });
       }
     } catch (err) {
       console.error("Erro ao criar senha:", err);

@@ -10,6 +10,12 @@ export const createTemporaryPassword = async (
   const expiresAt = new Date();
   expiresAt.setHours(expiresAt.getHours() + expiresInHours);
   
+  console.log('Criando senha temporária:', {
+    password,
+    description,
+    expires_at: expiresAt.toISOString()
+  });
+  
   const { data, error } = await supabase
     .from('temporary_passwords')
     .insert({
@@ -25,6 +31,7 @@ export const createTemporaryPassword = async (
     return null;
   }
   
+  console.log('Senha temporária criada com sucesso:', data);
   return data;
 };
 
