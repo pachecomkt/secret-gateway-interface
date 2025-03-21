@@ -112,6 +112,23 @@ serve(async (req) => {
     // Parse the response
     const members = await discordResponse.json();
     console.log(`Extraídos ${members.length} membros do servidor`);
+
+    // Also fetch roles from the server to get role names
+    const rolesApiUrl = `https://discord.com/api/v10/guilds/${serverId}/roles`;
+    const rolesResponse = await fetch(rolesApiUrl, {
+      headers: {
+        'Authorization': `Bot ${botToken.token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    let roles = [];
+    if (rolesResponse.ok) {
+      roles = await rolesResponse.json();
+      console.log(`Extraídos ${roles.length} cargos do servidor`);
+    } else {
+      console.error('Erro ao buscar cargos do servidor');
+    }
     
     // Process and filter members
     let filteredMembers = members.map((member: any) => {
@@ -124,16 +141,30 @@ serve(async (req) => {
       const isOnline = member.presence?.status === 'online' || 
                       member.presence?.status === 'idle' || 
                       member.presence?.status === 'dnd';
-                      
-      // Obter o cargo mais alto do usuário
-      const highestRole = member.roles?.length > 0
-        ? member.roles[0]?.name || 'Member'
-        : 'Member';
+      
+      // Obter o cargo mais alto do usuário (pelo ID)
+      let highestRoleId = null;
+      let highestRoleName = 'Member';
+      
+      if (member.roles && member.roles.length > 0) {
+        // Filtrar apenas os cargos que existem no membro
+        const memberRoles = roles.filter((role: any) => 
+          member.roles.includes(role.id)
+        );
         
+        // Ordenar por posição (maior posição é mais importante)
+        if (memberRoles.length > 0) {
+          const sortedRoles = memberRoles.sort((a: any, b: any) => b.position - a.position);
+          highestRoleId = sortedRoles[0].id;
+          highestRoleName = sortedRoles[0].name;
+        }
+      }
+                      
       return {
         discord_id: member.user.id,
         username: member.user.username || member.nick || `User_${member.user.id}`,
-        role: highestRole,
+        role: highestRoleName,
+        role_id: highestRoleId,
         last_active: lastActive,
         is_online: isOnline || false
       };
@@ -141,10 +172,17 @@ serve(async (req) => {
     
     // Aplicar filtros
     if (filters) {
-      // Filtrar por cargo
+      // Filtrar por cargo (nome)
       if (filters.role) {
         filteredMembers = filteredMembers.filter((member: any) => 
           member.role === filters.role
+        );
+      }
+      
+      // Filtrar por cargo (ID)
+      if (filters.roleId) {
+        filteredMembers = filteredMembers.filter((member: any) => 
+          member.role_id === filters.roleId
         );
       }
       
@@ -155,6 +193,16 @@ serve(async (req) => {
         
         filteredMembers = filteredMembers.filter((member: any) => 
           member.last_active && new Date(member.last_active) > oneDayAgo
+        );
+      }
+      
+      // Filtrar por ativos nas últimas 72 horas (3 dias)
+      if (filters.activeWithin72h) {
+        const threeDaysAgo = new Date();
+        threeDaysAgo.setHours(threeDaysAgo.getHours() - 72);
+        
+        filteredMembers = filteredMembers.filter((member: any) => 
+          member.last_active && new Date(member.last_active) > threeDaysAgo
         );
       }
       

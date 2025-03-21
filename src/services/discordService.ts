@@ -22,6 +22,7 @@ export interface DiscordUser {
   discord_id: string;
   username: string;
   role?: string;
+  role_id?: string;
   last_active?: string;
   is_online: boolean;
   list_id: string;
@@ -30,8 +31,28 @@ export interface DiscordUser {
 
 export interface UserFilter {
   role: string | null;
+  roleId: string | null;
   activeWithin24h: boolean;
+  activeWithin72h: boolean; // New 3-day activity filter
   onlineOnly: boolean;
+}
+
+export interface DiscordUserGroup {
+  id: string;
+  name: string;
+  description?: string;
+  leader_id: string;
+  created_at: string;
+  member_count?: number;
+}
+
+export interface GroupMember {
+  id: string;
+  group_id: string;
+  user_id: string;
+  joined_at: string;
+  user_email?: string;
+  user_name?: string;
 }
 
 // Funções para gerenciar tokens de bot
@@ -203,5 +224,124 @@ export const extractDiscordUsers = async (
       success: false,
       message: error.message || 'Erro ao extrair usuários do Discord'
     };
+  }
+};
+
+// Funções para gerenciar grupos de usuários
+export const createUserGroup = async (name: string, description?: string): Promise<DiscordUserGroup> => {
+  const { data, error } = await supabase
+    .from('discord_user_groups')
+    .insert({
+      name,
+      description
+    })
+    .select()
+    .single();
+    
+  if (error) {
+    console.error('Erro ao criar grupo:', error);
+    throw error;
+  }
+  
+  return data;
+};
+
+export const getUserGroups = async (): Promise<DiscordUserGroup[]> => {
+  // Busca grupos que o usuário lidera ou é membro
+  const { data: groups, error } = await supabase
+    .from('discord_user_groups')
+    .select('*')
+    .order('created_at', { ascending: false });
+    
+  if (error) {
+    console.error('Erro ao buscar grupos:', error);
+    throw error;
+  }
+  
+  if (!groups || groups.length === 0) {
+    return [];
+  }
+  
+  // Agora busca a contagem de membros para cada grupo
+  const groupsWithCount = await Promise.all(
+    groups.map(async (group) => {
+      const { count, error: countError } = await supabase
+        .from('discord_group_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('group_id', group.id);
+        
+      if (countError) {
+        console.error(`Erro ao contar membros do grupo ${group.id}:`, countError);
+        return { ...group, member_count: 0 };
+      }
+      
+      return { ...group, member_count: count || 0 };
+    })
+  );
+  
+  return groupsWithCount;
+};
+
+export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> => {
+  const { data, error } = await supabase
+    .from('discord_group_members')
+    .select('*')
+    .eq('group_id', groupId);
+    
+  if (error) {
+    console.error('Erro ao buscar membros do grupo:', error);
+    throw error;
+  }
+  
+  return data || [];
+};
+
+export const inviteUserToGroup = async (groupId: string, userEmail: string): Promise<boolean> => {
+  // Primeiro, busca o ID do usuário a partir do e-mail
+  const { data: user, error: userError } = await supabase
+    .rpc('get_user_id_from_email', { email: userEmail });
+    
+  if (userError || !user) {
+    console.error('Usuário não encontrado:', userError);
+    return false;
+  }
+  
+  // Agora, adiciona o usuário ao grupo
+  const { error } = await supabase
+    .from('discord_group_members')
+    .insert({
+      group_id: groupId,
+      user_id: user
+    });
+    
+  if (error) {
+    console.error('Erro ao adicionar membro ao grupo:', error);
+    return false;
+  }
+  
+  return true;
+};
+
+export const removeUserFromGroup = async (memberId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('discord_group_members')
+    .delete()
+    .eq('id', memberId);
+    
+  if (error) {
+    console.error('Erro ao remover membro do grupo:', error);
+    throw error;
+  }
+};
+
+export const deleteUserGroup = async (groupId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('discord_user_groups')
+    .delete()
+    .eq('id', groupId);
+    
+  if (error) {
+    console.error('Erro ao excluir grupo:', error);
+    throw error;
   }
 };

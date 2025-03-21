@@ -65,6 +65,7 @@ interface ScrapedUser {
   id: string;
   username: string;
   role?: string;
+  roleId?: string;
   lastActive?: Date;
   isOnline?: boolean;
 }
@@ -101,12 +102,15 @@ export const DiscordScraper = () => {
   // New state for user filtering
   const [userFilter, setUserFilter] = useState<UserFilter>({
     role: null,
+    roleId: null,
     activeWithin24h: false,
+    activeWithin72h: false, // New filter for 3-day activity
     onlineOnly: false
   });
   const [availableRoles, setAvailableRoles] = useState<string[]>([
     "Admin", "Moderator", "VIP", "Member", "New User"
   ]);
+  const [roleIdInput, setRoleIdInput] = useState("");
   
   // New state for broadcast tracking
   const [isBroadcasting, setIsBroadcasting] = useState(false);
@@ -269,6 +273,7 @@ export const DiscordScraper = () => {
         id: user.discord_id,
         username: user.username,
         role: user.role,
+        roleId: user.role_id,
         lastActive: user.last_active ? new Date(user.last_active) : undefined,
         isOnline: user.is_online
       }));
@@ -359,6 +364,7 @@ export const DiscordScraper = () => {
         id: user.discord_id,
         username: user.username,
         role: user.role,
+        roleId: user.role_id,
         lastActive: user.last_active ? new Date(user.last_active) : undefined,
         isOnline: user.is_online
       }));
@@ -409,6 +415,17 @@ export const DiscordScraper = () => {
     }
   };
 
+  // Função para adicionar filtro de ID de cargo
+  const addRoleIdFilter = () => {
+    if (roleIdInput) {
+      setUserFilter({
+        ...userFilter,
+        roleId: roleIdInput
+      });
+      setRoleIdInput("");
+    }
+  };
+
   // Function to apply filters when extracting users
   const applyFilters = () => {
     setFilterDialogOpen(false);
@@ -422,9 +439,12 @@ export const DiscordScraper = () => {
   const resetFilters = () => {
     setUserFilter({
       role: null,
+      roleId: null,
       activeWithin24h: false,
+      activeWithin72h: false,
       onlineOnly: false
     });
+    setRoleIdInput("");
     
     setFilterDialogOpen(false);
     
@@ -639,16 +659,26 @@ export const DiscordScraper = () => {
         </div>
         
         {/* Show filter info if any filter is active */}
-        {(userFilter.role || userFilter.activeWithin24h || userFilter.onlineOnly) && (
+        {(userFilter.role || userFilter.roleId || userFilter.activeWithin24h || userFilter.activeWithin72h || userFilter.onlineOnly) && (
           <div className="flex flex-wrap gap-2 mt-2">
             {userFilter.role && (
               <Badge variant="outline" className="bg-primary/10">
                 Cargo: {userFilter.role}
               </Badge>
             )}
+            {userFilter.roleId && (
+              <Badge variant="outline" className="bg-primary/10">
+                ID do Cargo: {userFilter.roleId}
+              </Badge>
+            )}
             {userFilter.activeWithin24h && (
               <Badge variant="outline" className="bg-primary/10">
                 Ativos em 24h
+              </Badge>
+            )}
+            {userFilter.activeWithin72h && (
+              <Badge variant="outline" className="bg-primary/10">
+                Ativos em 3 dias
               </Badge>
             )}
             {userFilter.onlineOnly && (
@@ -762,7 +792,9 @@ export const DiscordScraper = () => {
                         <TableCell>{user.username}</TableCell>
                         <TableCell>
                           {user.role && (
-                            <Badge variant="outline">{user.role}</Badge>
+                            <Badge variant="outline" title={`ID: ${user.roleId || 'N/A'}`}>
+                              {user.role}
+                            </Badge>
                           )}
                         </TableCell>
                         <TableCell>
@@ -870,36 +902,86 @@ export const DiscordScraper = () => {
               </Select>
             </div>
             
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="activeWithin24h" 
-                checked={userFilter.activeWithin24h}
-                onCheckedChange={(checked) => 
-                  setUserFilter({...userFilter, activeWithin24h: checked as boolean})
-                }
-              />
-              <label 
-                htmlFor="activeWithin24h" 
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Extrair apenas usuários ativos nas últimas 24 horas
-              </label>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Filtrar por ID de Cargo</label>
+              <div className="flex gap-2">
+                <Input 
+                  placeholder="ID do cargo no Discord" 
+                  value={roleIdInput}
+                  onChange={(e) => setRoleIdInput(e.target.value)}
+                />
+                <Button variant="outline" onClick={addRoleIdFilter} disabled={!roleIdInput}>
+                  Adicionar
+                </Button>
+              </div>
+              
+              {userFilter.roleId && (
+                <div className="mt-2">
+                  <Badge className="bg-primary/10 p-1.5">
+                    ID do Cargo: {userFilter.roleId}
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-4 w-4 ml-2 hover:bg-destructive/20"
+                      onClick={() => setUserFilter({...userFilter, roleId: null})}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </Badge>
+                </div>
+              )}
             </div>
             
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="onlineOnly" 
-                checked={userFilter.onlineOnly}
-                onCheckedChange={(checked) => 
-                  setUserFilter({...userFilter, onlineOnly: checked as boolean})
-                }
-              />
-              <label 
-                htmlFor="onlineOnly" 
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Extrair apenas usuários online
-              </label>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Filtros de Atividade</label>
+              
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="activeWithin24h" 
+                  checked={userFilter.activeWithin24h}
+                  onCheckedChange={(checked) => 
+                    setUserFilter({...userFilter, activeWithin24h: checked as boolean})
+                  }
+                />
+                <label 
+                  htmlFor="activeWithin24h" 
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Extrair apenas usuários ativos nas últimas 24 horas
+                </label>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="activeWithin72h" 
+                  checked={userFilter.activeWithin72h}
+                  onCheckedChange={(checked) => 
+                    setUserFilter({...userFilter, activeWithin72h: checked as boolean})
+                  }
+                />
+                <label 
+                  htmlFor="activeWithin72h" 
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Extrair apenas usuários ativos nos últimos 3 dias
+                </label>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="onlineOnly" 
+                  checked={userFilter.onlineOnly}
+                  onCheckedChange={(checked) => 
+                    setUserFilter({...userFilter, onlineOnly: checked as boolean})
+                  }
+                />
+                <label 
+                  htmlFor="onlineOnly" 
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Extrair apenas usuários online
+                </label>
+              </div>
             </div>
           </div>
           <DialogFooter>

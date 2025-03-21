@@ -54,6 +54,59 @@ export type Database = {
         }
         Relationships: []
       }
+      discord_group_members: {
+        Row: {
+          group_id: string
+          id: string
+          joined_at: string
+          user_id: string
+        }
+        Insert: {
+          group_id: string
+          id?: string
+          joined_at?: string
+          user_id: string
+        }
+        Update: {
+          group_id?: string
+          id?: string
+          joined_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discord_group_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "discord_user_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      discord_user_groups: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          leader_id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          leader_id: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          leader_id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       discord_user_lists: {
         Row: {
           created_at: string
@@ -87,6 +140,7 @@ export type Database = {
           last_active: string | null
           list_id: string
           role: string | null
+          role_id: string | null
           username: string
         }
         Insert: {
@@ -97,6 +151,7 @@ export type Database = {
           last_active?: string | null
           list_id: string
           role?: string | null
+          role_id?: string | null
           username: string
         }
         Update: {
@@ -107,6 +162,7 @@ export type Database = {
           last_active?: string | null
           list_id?: string
           role?: string | null
+          role_id?: string | null
           username?: string
         }
         Relationships: [
