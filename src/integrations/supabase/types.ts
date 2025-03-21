@@ -9,6 +9,48 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      admins: {
+        Row: {
+          criado_em: string
+          id: string
+          senha: string
+          user_id: string | null
+        }
+        Insert: {
+          criado_em?: string
+          id?: string
+          senha: string
+          user_id?: string | null
+        }
+        Update: {
+          criado_em?: string
+          id?: string
+          senha?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      super_users: {
+        Row: {
+          criado_em: string
+          id: string
+          senha: string
+          user_id: string | null
+        }
+        Insert: {
+          criado_em?: string
+          id?: string
+          senha: string
+          user_id?: string | null
+        }
+        Update: {
+          criado_em?: string
+          id?: string
+          senha?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       temporary_passwords: {
         Row: {
           created_at: string
@@ -33,6 +75,27 @@ export type Database = {
           expires_at?: string
           id?: string
           password?: string
+        }
+        Relationships: []
+      }
+      usuarios: {
+        Row: {
+          criado_em: string
+          id: string
+          senha: string
+          user_id: string | null
+        }
+        Insert: {
+          criado_em?: string
+          id?: string
+          senha: string
+          user_id?: string | null
+        }
+        Update: {
+          criado_em?: string
+          id?: string
+          senha?: string
+          user_id?: string | null
         }
         Relationships: []
       }

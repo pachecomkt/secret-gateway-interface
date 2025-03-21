@@ -44,6 +44,43 @@ export const validatePassword = async (password: string): Promise<boolean> => {
     return true;
   }
   
+  // Verificar na tabela de super_users
+  const { data: superUserData } = await supabase
+    .from('super_users')
+    .select()
+    .eq('senha', password)
+    .maybeSingle();
+  
+  if (superUserData) {
+    console.log('Validado como super usuário');
+    return true;
+  }
+  
+  // Verificar na tabela de admins
+  const { data: adminData } = await supabase
+    .from('admins')
+    .select()
+    .eq('senha', password)
+    .maybeSingle();
+  
+  if (adminData) {
+    console.log('Validado como administrador');
+    return true;
+  }
+  
+  // Verificar na tabela de usuarios
+  const { data: userData } = await supabase
+    .from('usuarios')
+    .select()
+    .eq('senha', password)
+    .maybeSingle();
+  
+  if (userData) {
+    console.log('Validado como usuário regular');
+    return true;
+  }
+  
+  // Por fim, verificar na tabela de senhas temporárias
   const { data, error } = await supabase
     .from('temporary_passwords')
     .select()
@@ -60,15 +97,76 @@ export const validatePassword = async (password: string): Promise<boolean> => {
   return !!data;
 };
 
-export const checkPasswordStatus = async (password: string): Promise<{exists: boolean; expired: boolean; isAdmin: boolean}> => {
-  // Se a senha for "Admin@2024Sec!", consideramos como administrador
+export const checkPasswordStatus = async (password: string): Promise<{
+  exists: boolean; 
+  expired: boolean; 
+  isAdmin: boolean;
+  isSuperUser: boolean;
+  isRegularUser: boolean;
+}> => {
+  // Se a senha for "Admin@2024Sec!", consideramos como administrador hardcoded
   if (password === "Admin@2024Sec!") {
-    return { exists: true, expired: false, isAdmin: true };
+    return {
+      exists: true,
+      expired: false,
+      isAdmin: true,
+      isSuperUser: true,
+      isRegularUser: false
+    };
   }
   
-  const now = new Date().toISOString();
+  // Verificar na tabela de super_users
+  const { data: superUserData } = await supabase
+    .from('super_users')
+    .select()
+    .eq('senha', password)
+    .maybeSingle();
   
-  // Verificar se a senha existe independentemente da expiração
+  if (superUserData) {
+    return {
+      exists: true,
+      expired: false,
+      isAdmin: false,
+      isSuperUser: true,
+      isRegularUser: false
+    };
+  }
+  
+  // Verificar na tabela de admins
+  const { data: adminData } = await supabase
+    .from('admins')
+    .select()
+    .eq('senha', password)
+    .maybeSingle();
+  
+  if (adminData) {
+    return {
+      exists: true,
+      expired: false,
+      isAdmin: true,
+      isSuperUser: false,
+      isRegularUser: false
+    };
+  }
+  
+  // Verificar na tabela de usuarios
+  const { data: userData } = await supabase
+    .from('usuarios')
+    .select()
+    .eq('senha', password)
+    .maybeSingle();
+  
+  if (userData) {
+    return {
+      exists: true,
+      expired: false,
+      isAdmin: false,
+      isSuperUser: false,
+      isRegularUser: true
+    };
+  }
+  
+  // Por fim, verificar na tabela de senhas temporárias
   const { data: passwordData, error: passwordError } = await supabase
     .from('temporary_passwords')
     .select()
@@ -77,11 +175,23 @@ export const checkPasswordStatus = async (password: string): Promise<{exists: bo
   
   if (passwordError) {
     console.error('Erro ao verificar senha:', passwordError);
-    return { exists: false, expired: false, isAdmin: false };
+    return {
+      exists: false,
+      expired: false,
+      isAdmin: false,
+      isSuperUser: false,
+      isRegularUser: false
+    };
   }
   
   if (!passwordData) {
-    return { exists: false, expired: false, isAdmin: false };
+    return {
+      exists: false,
+      expired: false,
+      isAdmin: false,
+      isSuperUser: false,
+      isRegularUser: false
+    };
   }
   
   // Verificar se está expirada
@@ -90,7 +200,9 @@ export const checkPasswordStatus = async (password: string): Promise<{exists: bo
   return { 
     exists: true, 
     expired: isExpired,
-    isAdmin: false 
+    isAdmin: false,
+    isSuperUser: false,
+    isRegularUser: true
   };
 };
 
