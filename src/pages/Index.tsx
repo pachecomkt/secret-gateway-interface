@@ -21,19 +21,24 @@ const Index = () => {
     return <PasswordProtection onUnlock={handleUnlock} />;
   }
 
-  // Super usuários e administradores têm acesso ao Gerenciador de Senhas
-  if (isSuperUser || isAdmin) {
+  // Super usuários têm acesso ao MainLayout com todas as opções
+  if (isSuperUser) {
+    return <MainLayout isSuperUser={true} isAdmin={false} isRegularUser={false} />;
+  }
+  
+  // Administradores têm acesso somente ao Gerenciador de Senhas
+  if (isAdmin) {
     return (
       <div className="flex flex-col min-h-screen">
         <div className="flex-1">
-          <PasswordManager />
+          <PasswordManager isSuperUser={false} />
         </div>
       </div>
     );
   }
 
-  // Usuários regulares veem apenas o layout principal
-  return <MainLayout />;
+  // Usuários regulares veem apenas o layout principal sem acesso ao gerenciador de senhas
+  return <MainLayout isSuperUser={false} isAdmin={false} isRegularUser={true} />;
 };
 
 export default Index;

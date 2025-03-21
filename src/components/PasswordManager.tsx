@@ -5,7 +5,11 @@ import { PasswordTable } from './PasswordTable';
 import { getTemporaryPasswords } from "@/services/passwordService";
 import { TemporaryPassword } from "@/types/database.types";
 
-export const PasswordManager = () => {
+interface PasswordManagerProps {
+  isSuperUser: boolean;
+}
+
+export const PasswordManager = ({ isSuperUser }: PasswordManagerProps) => {
   const [passwords, setPasswords] = useState<TemporaryPassword[]>([]);
 
   const loadPasswords = async () => {
@@ -27,7 +31,7 @@ export const PasswordManager = () => {
   return (
     <div className="container mx-auto p-4 space-y-6">
       <PasswordCreationForm onPasswordCreated={loadPasswords} />
-      <PasswordTable passwords={passwords} onDelete={loadPasswords} />
+      <PasswordTable passwords={passwords} onDelete={loadPasswords} isSuperUser={isSuperUser} />
     </div>
   );
 };

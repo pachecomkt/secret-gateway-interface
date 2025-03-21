@@ -10,8 +10,27 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Trash, Clock } from "lucide-react";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { 
+  Trash, 
+  Clock, 
+  MoreHorizontal,
+  Edit,
+  Copy
+} from "lucide-react";
+import { 
+  Card, 
+  CardContent, 
+  CardDescription, 
+  CardFooter, 
+  CardHeader, 
+  CardTitle 
+} from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { TemporaryPassword } from "@/types/database.types";
 import { deleteTemporaryPassword } from "@/services/passwordService";
 import { useToast } from "@/hooks/use-toast";
@@ -19,9 +38,10 @@ import { useToast } from "@/hooks/use-toast";
 interface PasswordTableProps {
   passwords: TemporaryPassword[];
   onDelete: () => void;
+  isSuperUser: boolean;
 }
 
-export const PasswordTable = ({ passwords, onDelete }: PasswordTableProps) => {
+export const PasswordTable = ({ passwords, onDelete, isSuperUser }: PasswordTableProps) => {
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -49,6 +69,15 @@ export const PasswordTable = ({ passwords, onDelete }: PasswordTableProps) => {
     } finally {
       setIsDeleting(null);
     }
+  };
+
+  const handleCopyPassword = (password: string) => {
+    navigator.clipboard.writeText(password);
+    toast({
+      title: "Senha copiada",
+      description: "A senha foi copiada para a área de transferência",
+      variant: "default",
+    });
   };
 
   const formatDate = (dateString: string) => {
@@ -99,7 +128,10 @@ export const PasswordTable = ({ passwords, onDelete }: PasswordTableProps) => {
             
             {passwords.map((pwd) => (
               <TableRow key={pwd.id} className={isExpired(pwd.expires_at) ? "opacity-60" : ""}>
-                <TableCell className="font-medium">{pwd.password}</TableCell>
+                <TableCell className="font-medium">
+                  {/* Mostramos apenas os primeiros 3 caracteres da senha por segurança */}
+                  {pwd.password.substring(0, 3)}***
+                </TableCell>
                 <TableCell>{pwd.description || "—"}</TableCell>
                 <TableCell>{formatDate(pwd.created_at)}</TableCell>
                 <TableCell>{formatDate(pwd.expires_at)}</TableCell>
@@ -112,14 +144,34 @@ export const PasswordTable = ({ passwords, onDelete }: PasswordTableProps) => {
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => handleDeletePassword(pwd.id)}
-                    disabled={isDeleting === pwd.id}
-                  >
-                    <Trash className="h-4 w-4" />
-                  </Button>
+                  {isSuperUser ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleCopyPassword(pwd.password)}>
+                          <Copy className="mr-2 h-4 w-4" />
+                          <span>Copiar Senha</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDeletePassword(pwd.id)}>
+                          <Trash className="mr-2 h-4 w-4" />
+                          <span>Excluir</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDeletePassword(pwd.id)}
+                      disabled={isDeleting === pwd.id}
+                    >
+                      <Trash className="h-4 w-4" />
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

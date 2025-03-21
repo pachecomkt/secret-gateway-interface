@@ -4,24 +4,34 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DiscordScraper } from './DiscordScraper';
 import { PasswordManager } from './PasswordManager';
 
-export const MainLayout = () => {
+interface MainLayoutProps {
+  isSuperUser: boolean;
+  isAdmin?: boolean;
+  isRegularUser?: boolean;
+}
+
+export const MainLayout = ({ isSuperUser, isAdmin, isRegularUser }: MainLayoutProps) => {
   const [activeTab, setActiveTab] = useState("scraper");
 
   return (
     <div className="container mx-auto p-4">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className={`grid w-full ${isSuperUser ? 'grid-cols-2' : 'grid-cols-1'}`}>
           <TabsTrigger value="scraper">Discord Scraper</TabsTrigger>
-          <TabsTrigger value="passwords">Gerenciar Senhas</TabsTrigger>
+          {isSuperUser && (
+            <TabsTrigger value="passwords">Gerenciar Senhas</TabsTrigger>
+          )}
         </TabsList>
         
         <TabsContent value="scraper">
           <DiscordScraper />
         </TabsContent>
         
-        <TabsContent value="passwords">
-          <PasswordManager />
-        </TabsContent>
+        {isSuperUser && (
+          <TabsContent value="passwords">
+            <PasswordManager isSuperUser={true} />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
