@@ -30,6 +30,95 @@ export type Database = {
         }
         Relationships: []
       }
+      discord_bot_tokens: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          token: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          token?: string
+        }
+        Relationships: []
+      }
+      discord_user_lists: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      discord_users: {
+        Row: {
+          created_at: string
+          discord_id: string
+          id: string
+          is_online: boolean | null
+          last_active: string | null
+          list_id: string
+          role: string | null
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          discord_id: string
+          id?: string
+          is_online?: boolean | null
+          last_active?: string | null
+          list_id: string
+          role?: string | null
+          username: string
+        }
+        Update: {
+          created_at?: string
+          discord_id?: string
+          id?: string
+          is_online?: boolean | null
+          last_active?: string | null
+          list_id?: string
+          role?: string | null
+          username?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discord_users_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "discord_user_lists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       super_users: {
         Row: {
           criado_em: string

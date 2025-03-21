@@ -1,0 +1,228 @@
+
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    // Get the request body
+    const { 
+      serverId, 
+      tokenId,
+      filters,
+      listName,
+      listDescription 
+    } = await req.json();
+
+    // Get the authorization header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Authorization header is required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Create a Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Extract the JWT token from the authorization header
+    const token = authHeader.replace('Bearer ', '');
+    
+    // Verify the user is authenticated and get their ID
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check if the user is a super user or admin
+    const { data: superUser } = await supabase
+      .from('super_users')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
+      
+    const { data: admin } = await supabase
+      .from('admins')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
+      
+    if (!superUser && !admin) {
+      return new Response(
+        JSON.stringify({ error: 'Permissão negada' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Get the Discord bot token
+    const { data: botToken, error: tokenError } = await supabase
+      .from('discord_bot_tokens')
+      .select('token')
+      .eq('id', tokenId)
+      .maybeSingle();
+      
+    if (tokenError || !botToken) {
+      return new Response(
+        JSON.stringify({ error: 'Token de bot não encontrado' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Call Discord API to fetch users
+    console.log(`Extraindo usuários do servidor ${serverId} com token ${tokenId}...`);
+    
+    // Construa a URL da API com base no servidor solicitado
+    const discordApiUrl = `https://discord.com/api/v10/guilds/${serverId}/members?limit=1000`;
+    
+    // Chamar a API do Discord com o token do bot
+    const discordResponse = await fetch(discordApiUrl, {
+      headers: {
+        'Authorization': `Bot ${botToken.token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!discordResponse.ok) {
+      const errorData = await discordResponse.json();
+      return new Response(
+        JSON.stringify({ 
+          error: 'Erro ao extrair usuários do Discord', 
+          details: errorData,
+          status: discordResponse.status
+        }),
+        { status: discordResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Parse the response
+    const members = await discordResponse.json();
+    console.log(`Extraídos ${members.length} membros do servidor`);
+    
+    // Process and filter members
+    let filteredMembers = members.map((member: any) => {
+      // Converter timestamp de presence.last_activity para Date
+      const lastActive = member.presence?.last_activity 
+        ? new Date(member.presence.last_activity) 
+        : null;
+        
+      // Detectar se o usuário está online
+      const isOnline = member.presence?.status === 'online' || 
+                      member.presence?.status === 'idle' || 
+                      member.presence?.status === 'dnd';
+                      
+      // Obter o cargo mais alto do usuário
+      const highestRole = member.roles?.length > 0
+        ? member.roles[0]?.name || 'Member'
+        : 'Member';
+        
+      return {
+        discord_id: member.user.id,
+        username: member.user.username || member.nick || `User_${member.user.id}`,
+        role: highestRole,
+        last_active: lastActive,
+        is_online: isOnline || false
+      };
+    });
+    
+    // Aplicar filtros
+    if (filters) {
+      // Filtrar por cargo
+      if (filters.role) {
+        filteredMembers = filteredMembers.filter((member: any) => 
+          member.role === filters.role
+        );
+      }
+      
+      // Filtrar por ativos nas últimas 24 horas
+      if (filters.activeWithin24h) {
+        const oneDayAgo = new Date();
+        oneDayAgo.setHours(oneDayAgo.getHours() - 24);
+        
+        filteredMembers = filteredMembers.filter((member: any) => 
+          member.last_active && new Date(member.last_active) > oneDayAgo
+        );
+      }
+      
+      // Filtrar por usuários online
+      if (filters.onlineOnly) {
+        filteredMembers = filteredMembers.filter((member: any) => 
+          member.is_online
+        );
+      }
+    }
+    
+    // Criar uma nova lista no Supabase
+    const { data: newList, error: listError } = await supabase
+      .from('discord_user_lists')
+      .insert({
+        name: listName || `Lista do servidor ${serverId}`,
+        description: listDescription || `Extraído em ${new Date().toISOString()}`,
+        created_by: user.id
+      })
+      .select()
+      .single();
+      
+    if (listError || !newList) {
+      return new Response(
+        JSON.stringify({ error: 'Erro ao criar lista de usuários', details: listError }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Preparar os dados dos usuários para inserção
+    const usersToInsert = filteredMembers.map((member: any) => ({
+      ...member,
+      list_id: newList.id
+    }));
+    
+    // Inserir os usuários no Supabase
+    const { data: insertedUsers, error: insertError } = await supabase
+      .from('discord_users')
+      .insert(usersToInsert);
+      
+    if (insertError) {
+      // Se houver erro na inserção, remover a lista criada anteriormente
+      await supabase.from('discord_user_lists').delete().eq('id', newList.id);
+      
+      return new Response(
+        JSON.stringify({ error: 'Erro ao salvar usuários', details: insertError }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Return success response
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: `${filteredMembers.length} usuários extraídos com sucesso`,
+        listId: newList.id,
+        listName: newList.name,
+        users: filteredMembers
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+    
+  } catch (error) {
+    console.error("Erro na função extract-discord-users:", error.message);
+    
+    return new Response(
+      JSON.stringify({ error: 'Erro interno do servidor', details: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});

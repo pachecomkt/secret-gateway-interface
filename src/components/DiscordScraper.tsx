@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Trash, Download, Server, Key, Eye, EyeOff, Send, Save, List, ArrowRight, Check, X, MessageCircle, Activity, Timer, Filter } from "lucide-react";
@@ -40,6 +40,20 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import {
+  getDiscordBotTokens,
+  saveDiscordBotToken,
+  deleteDiscordBotToken,
+  getDiscordUserLists,
+  getDiscordUsers,
+  deleteDiscordUserList,
+  extractDiscordUsers,
+  DiscordBotToken as BotTokenType,
+  DiscordUserList,
+  DiscordUser,
+  UserFilter
+} from "@/services/discordService";
+import { supabase } from "@/integrations/supabase/client";
 
 interface BotToken {
   id: string;
@@ -70,12 +84,6 @@ interface MessageStatus {
   error?: string;
 }
 
-interface UserFilter {
-  role: string | null;
-  activeWithin24h: boolean;
-  onlineOnly: boolean;
-}
-
 export const DiscordScraper = () => {
   const [tokens, setTokens] = useState<BotToken[]>([]);
   const [newToken, setNewToken] = useState('');
@@ -88,6 +96,7 @@ export const DiscordScraper = () => {
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [filterDialogOpen, setFilterDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   
   // New state for user filtering
   const [userFilter, setUserFilter] = useState<UserFilter>({
@@ -108,7 +117,54 @@ export const DiscordScraper = () => {
   
   const { toast } = useToast();
 
-  const addToken = () => {
+  // Carregar tokens e listas salvas quando o componente é montado
+  useEffect(() => {
+    loadTokens();
+    loadSavedLists();
+  }, []);
+
+  const loadTokens = async () => {
+    try {
+      const botTokens = await getDiscordBotTokens();
+      setTokens(botTokens.map(token => ({
+        id: token.id,
+        token: token.token,
+        visible: false
+      })));
+    } catch (error) {
+      console.error('Erro ao carregar tokens:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os tokens dos bots",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const loadSavedLists = async () => {
+    try {
+      const lists = await getDiscordUserLists();
+      
+      // Transformar as listas do formato da API para o formato usado pelo componente
+      const formattedLists: SavedList[] = lists.map(list => ({
+        id: list.id,
+        name: list.name,
+        users: [], // Inicialmente vazio, carregado somente quando a lista é selecionada
+        createdAt: new Date(list.created_at).toLocaleString()
+      }));
+      
+      setSavedLists(formattedLists);
+    } catch (error) {
+      console.error('Erro ao carregar listas:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as listas salvas",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const addToken = async () => {
     if (!newToken) {
       toast({
         title: "Erro",
@@ -117,12 +173,30 @@ export const DiscordScraper = () => {
       });
       return;
     }
-    setTokens([...tokens, { id: Date.now().toString(), token: newToken, visible: false }]);
-    setNewToken('');
-    toast({
-      title: "Sucesso",
-      description: "Token adicionado com sucesso",
-    });
+    
+    try {
+      const savedToken = await saveDiscordBotToken(newToken);
+      
+      setTokens([...tokens, { 
+        id: savedToken.id, 
+        token: savedToken.token, 
+        visible: false 
+      }]);
+      
+      setNewToken('');
+      
+      toast({
+        title: "Sucesso",
+        description: "Token adicionado com sucesso",
+      });
+    } catch (error) {
+      console.error('Erro ao adicionar token:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível adicionar o token",
+        variant: "destructive",
+      });
+    }
   };
 
   const toggleTokenVisibility = (id: string) => {
@@ -131,12 +205,24 @@ export const DiscordScraper = () => {
     ));
   };
 
-  const removeToken = (id: string) => {
-    setTokens(tokens.filter(token => token.id !== id));
-    toast({
-      title: "Sucesso",
-      description: "Token removido com sucesso",
-    });
+  const removeToken = async (id: string) => {
+    try {
+      await deleteDiscordBotToken(id);
+      
+      setTokens(tokens.filter(token => token.id !== id));
+      
+      toast({
+        title: "Sucesso",
+        description: "Token removido com sucesso",
+      });
+    } catch (error) {
+      console.error('Erro ao remover token:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível remover o token",
+        variant: "destructive",
+      });
+    }
   };
 
   const scrapeUsers = async () => {
@@ -161,22 +247,60 @@ export const DiscordScraper = () => {
       title: "Iniciando",
       description: "Iniciando extração de usuários...",
     });
-    // Aqui você implementará a lógica de scraping
-
-    // Mock data for now - enhanced with roles and last active info
-    const mockUsers: ScrapedUser[] = Array(15).fill(null).map((_, i) => ({
-      id: `user_${i+1}`,
-      username: `discord_user_${i+1}`,
-      role: availableRoles[Math.floor(Math.random() * availableRoles.length)],
-      lastActive: new Date(Date.now() - Math.floor(Math.random() * 3 * 24 * 60 * 60 * 1000)),
-      isOnline: Math.random() > 0.5
-    }));
     
-    setScrapedUsers(mockUsers);
-    setSaveDialogOpen(true);
+    setIsLoading(true);
+    
+    try {
+      // Usar o primeiro token para extrair usuários
+      const result = await extractDiscordUsers(
+        serverId,
+        tokens[0].id,
+        userFilter,
+        `Lista do servidor ${serverId}`,
+        `Extraído em ${new Date().toLocaleString()}`
+      );
+      
+      if (!result.success) {
+        throw new Error(result.message);
+      }
+      
+      // Transformar os usuários retornados para o formato usado pelo componente
+      const extractedUsers: ScrapedUser[] = (result.users || []).map(user => ({
+        id: user.discord_id,
+        username: user.username,
+        role: user.role,
+        lastActive: user.last_active ? new Date(user.last_active) : undefined,
+        isOnline: user.is_online
+      }));
+      
+      setScrapedUsers(extractedUsers);
+      setSaveDialogOpen(true);
+      
+      // Recarregar as listas salvas para incluir a nova lista
+      loadSavedLists();
+      
+      // Se uma lista foi criada, selecionar esta lista
+      if (result.listId) {
+        setSelectedListId(result.listId);
+      }
+      
+      toast({
+        title: "Sucesso",
+        description: `${extractedUsers.length} usuários extraídos com sucesso`,
+      });
+    } catch (error) {
+      console.error('Erro ao extrair usuários:', error);
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao extrair usuários do Discord",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const saveUserList = () => {
+  const saveUserList = async () => {
     if (!newListName) {
       toast({
         title: "Erro",
@@ -186,86 +310,112 @@ export const DiscordScraper = () => {
       return;
     }
     
-    const newList: SavedList = {
-      id: Date.now().toString(),
-      name: newListName,
-      users: [...scrapedUsers],
-      createdAt: new Date().toLocaleString(),
-    };
-    
-    setSavedLists([...savedLists, newList]);
-    setNewListName('');
-    setSaveDialogOpen(false);
-    
-    toast({
-      title: "Sucesso",
-      description: `Lista "${newList.name}" salva com ${scrapedUsers.length} usuários`,
-    });
+    // A lista já foi salva automaticamente no banco de dados
+    // Este método agora apenas atualiza o nome da lista
+    try {
+      // Atualizar o nome da lista no Supabase
+      const { error } = await supabase
+        .from('discord_user_lists')
+        .update({ name: newListName })
+        .eq('id', selectedListId);
+        
+      if (error) {
+        throw error;
+      }
+      
+      // Atualizar a lista local
+      setSavedLists(savedLists.map(list => 
+        list.id === selectedListId
+          ? { ...list, name: newListName }
+          : list
+      ));
+      
+      setNewListName('');
+      setSaveDialogOpen(false);
+      
+      toast({
+        title: "Sucesso",
+        description: `Lista "${newListName}" salva com ${scrapedUsers.length} usuários`,
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar nome da lista:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao atualizar o nome da lista",
+        variant: "destructive",
+      });
+    }
   };
 
-  const loadList = (listId: string) => {
-    const list = savedLists.find(list => list.id === listId);
-    if (list) {
-      setScrapedUsers(list.users);
+  const loadList = async (listId: string) => {
+    try {
+      setIsLoading(true);
+      
+      // Buscar usuários da lista
+      const users = await getDiscordUsers(listId);
+      
+      // Transformar para o formato usado pelo componente
+      const formattedUsers: ScrapedUser[] = users.map(user => ({
+        id: user.discord_id,
+        username: user.username,
+        role: user.role,
+        lastActive: user.last_active ? new Date(user.last_active) : undefined,
+        isOnline: user.is_online
+      }));
+      
+      setScrapedUsers(formattedUsers);
       setSelectedListId(listId);
+      
+      const list = savedLists.find(list => list.id === listId);
       
       toast({
         title: "Lista carregada",
-        description: `Lista "${list.name}" com ${list.users.length} usuários`,
+        description: `Lista "${list?.name}" com ${formattedUsers.length} usuários`,
       });
-    }
-  };
-
-  const deleteList = (listId: string) => {
-    setSavedLists(savedLists.filter(list => list.id !== listId));
-    if (selectedListId === listId) {
-      setSelectedListId(null);
-    }
-    
-    toast({
-      title: "Lista removida",
-      description: "A lista foi removida com sucesso",
-    });
-  };
-
-  // New function to filter users
-  const applyFilters = () => {
-    const list = savedLists.find(list => list.id === selectedListId);
-    if (!list) {
+    } catch (error) {
+      console.error('Erro ao carregar lista:', error);
       toast({
         title: "Erro",
-        description: "Selecione uma lista para filtrar",
+        description: "Erro ao carregar a lista de usuários",
         variant: "destructive",
       });
-      return;
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    let filteredUsers = [...list.users];
-    
-    // Apply role filter
-    if (userFilter.role) {
-      filteredUsers = filteredUsers.filter(user => user.role === userFilter.role);
+  const deleteList = async (listId: string) => {
+    try {
+      await deleteDiscordUserList(listId);
+      
+      setSavedLists(savedLists.filter(list => list.id !== listId));
+      
+      if (selectedListId === listId) {
+        setSelectedListId(null);
+        setScrapedUsers([]);
+      }
+      
+      toast({
+        title: "Lista removida",
+        description: "A lista foi removida com sucesso",
+      });
+    } catch (error) {
+      console.error('Erro ao remover lista:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao remover a lista",
+        variant: "destructive",
+      });
     }
-    
-    // Apply active within 24h filter
-    if (userFilter.activeWithin24h) {
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      filteredUsers = filteredUsers.filter(user => 
-        user.lastActive && new Date(user.lastActive) > oneDayAgo
-      );
-    }
-    
-    // Apply online only filter
-    if (userFilter.onlineOnly) {
-      filteredUsers = filteredUsers.filter(user => user.isOnline);
-    }
-    
-    setScrapedUsers(filteredUsers);
+  };
+
+  // Function to apply filters when extracting users
+  const applyFilters = () => {
     setFilterDialogOpen(false);
     
     toast({
       title: "Filtros aplicados",
-      description: `${filteredUsers.length} usuários encontrados com os filtros atuais`,
+      description: "Os filtros serão aplicados na próxima extração de usuários",
     });
   };
 
@@ -275,11 +425,6 @@ export const DiscordScraper = () => {
       activeWithin24h: false,
       onlineOnly: false
     });
-    
-    const list = savedLists.find(list => list.id === selectedListId);
-    if (list) {
-      setScrapedUsers(list.users);
-    }
     
     setFilterDialogOpen(false);
     
@@ -353,9 +498,6 @@ export const DiscordScraper = () => {
       // Increment completed counter
       setCompletedMessages(prev => prev + 1);
     }
-    
-    // Keep the dialog open to show results
-    // User can close manually
   };
   
   const stopBroadcast = () => {
@@ -390,6 +532,7 @@ export const DiscordScraper = () => {
 
   return (
     <div className="glass rounded-lg p-6 space-y-8">
+      {/* Step 1: Add Bot Tokens */}
       <div className="space-y-4">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <Server className="h-6 w-6" />
@@ -469,31 +612,78 @@ export const DiscordScraper = () => {
         </div>
       </div>
 
+      {/* Step 2: Set Target Server and Filters */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Server className="h-5 w-5" />
-          <h3 className="text-lg font-semibold">Passo 2: Definir Servidor Alvo</h3>
+          <h3 className="text-lg font-semibold">Passo 2: Definir Servidor Alvo e Filtros</h3>
         </div>
         <div className="flex gap-2">
-          <Input
-            type="text"
-            placeholder="ID do Servidor Discord"
-            value={serverId}
-            onChange={(e) => setServerId(e.target.value)}
-            className="bg-secondary/50"
-          />
+          <div className="flex-1">
+            <Input
+              type="text"
+              placeholder="ID do Servidor Discord"
+              value={serverId}
+              onChange={(e) => setServerId(e.target.value)}
+              className="bg-secondary/50"
+            />
+          </div>
+          <Button 
+            variant="outline" 
+            onClick={() => setFilterDialogOpen(true)}
+            className="flex items-center gap-1"
+          >
+            <Filter className="h-3.5 w-3.5" />
+            Filtros
+          </Button>
         </div>
+        
+        {/* Show filter info if any filter is active */}
+        {(userFilter.role || userFilter.activeWithin24h || userFilter.onlineOnly) && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {userFilter.role && (
+              <Badge variant="outline" className="bg-primary/10">
+                Cargo: {userFilter.role}
+              </Badge>
+            )}
+            {userFilter.activeWithin24h && (
+              <Badge variant="outline" className="bg-primary/10">
+                Ativos em 24h
+              </Badge>
+            )}
+            {userFilter.onlineOnly && (
+              <Badge variant="outline" className="bg-primary/10">
+                Apenas online
+              </Badge>
+            )}
+          </div>
+        )}
       </div>
 
+      {/* Step 3: Manage User Lists */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Download className="h-5 w-5" />
             <h3 className="text-lg font-semibold">Passo 3: Gerenciar Listas de Usuários</h3>
           </div>
-          <Button onClick={scrapeUsers} variant="default" className="bg-blue-600 hover:bg-blue-700">
-            <Download className="h-4 w-4 mr-2" />
-            Extrair Novos Usuários
+          <Button 
+            onClick={scrapeUsers} 
+            variant="default" 
+            className="bg-blue-600 hover:bg-blue-700"
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <div className="flex items-center gap-2">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                <span>Extraindo...</span>
+              </div>
+            ) : (
+              <>
+                <Download className="h-4 w-4 mr-2" />
+                Extrair Novos Usuários
+              </>
+            )}
           </Button>
         </div>
         
@@ -524,13 +714,19 @@ export const DiscordScraper = () => {
                         variant="outline" 
                         size="sm" 
                         onClick={() => loadList(list.id)}
+                        disabled={isLoading}
                       >
-                        Usar
+                        {isLoading && selectedListId === list.id ? (
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                        ) : (
+                          'Usar'
+                        )}
                       </Button>
                       <Button 
                         variant="ghost" 
                         size="sm"
                         onClick={() => deleteList(list.id)}
+                        disabled={isLoading}
                       >
                         <Trash className="h-4 w-4 text-destructive-foreground" />
                       </Button>
@@ -542,21 +738,7 @@ export const DiscordScraper = () => {
           </div>
           
           <div className="md:w-1/2 space-y-2">
-            <div className="flex justify-between items-center">
-              <div className="font-medium text-sm">Usuários da Lista Atual</div>
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="flex items-center gap-1"
-                  onClick={() => setFilterDialogOpen(true)}
-                  disabled={!selectedListId}
-                >
-                  <Filter className="h-3.5 w-3.5" />
-                  Filtrar
-                </Button>
-              </div>
-            </div>
+            <div className="font-medium text-sm">Usuários da Lista Atual</div>
             <div className="p-4 border rounded-md bg-secondary/10 max-h-[200px] overflow-y-auto">
               {scrapedUsers.length === 0 ? (
                 <div className="text-center text-muted-foreground text-sm">
@@ -608,6 +790,7 @@ export const DiscordScraper = () => {
         </div>
       </div>
 
+      {/* Step 4: Send Messages */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Send className="h-5 w-5" />
@@ -623,7 +806,7 @@ export const DiscordScraper = () => {
           onClick={sendMessages} 
           className="w-full" 
           variant="secondary" 
-          disabled={isBroadcasting}
+          disabled={isBroadcasting || scrapedUsers.length === 0}
         >
           <Send className="h-4 w-4 mr-2" />
           Enviar Mensagens ({scrapedUsers.length} usuários)
@@ -659,13 +842,13 @@ export const DiscordScraper = () => {
         </DialogContent>
       </Dialog>
 
-      {/* New Dialog for filtering users */}
+      {/* Dialog for filtering users */}
       <Dialog open={filterDialogOpen} onOpenChange={setFilterDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Filtrar Usuários</DialogTitle>
+            <DialogTitle>Filtrar Usuários para Extração</DialogTitle>
             <DialogDescription>
-              Defina critérios para filtrar os usuários da lista selecionada.
+              Defina critérios para filtrar os usuários que serão extraídos.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
@@ -699,7 +882,7 @@ export const DiscordScraper = () => {
                 htmlFor="activeWithin24h" 
                 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
               >
-                Ativos nas últimas 24 horas
+                Extrair apenas usuários ativos nas últimas 24 horas
               </label>
             </div>
             
@@ -715,7 +898,7 @@ export const DiscordScraper = () => {
                 htmlFor="onlineOnly" 
                 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
               >
-                Apenas usuários online
+                Extrair apenas usuários online
               </label>
             </div>
           </div>
@@ -730,7 +913,7 @@ export const DiscordScraper = () => {
         </DialogContent>
       </Dialog>
 
-      {/* New Dialog for broadcasting status */}
+      {/* Dialog for broadcasting status */}
       <Dialog open={broadcastDialogOpen} onOpenChange={setBroadcastDialogOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
