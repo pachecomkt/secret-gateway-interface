@@ -1,7 +1,8 @@
+
 import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash, Download, Server, Key, Eye, EyeOff, Send, Save, List, ArrowRight, Check, X, MessageCircle, Activity, Timer } from "lucide-react";
+import { Plus, Trash, Download, Server, Key, Eye, EyeOff, Send, Save, List, ArrowRight, Check, X, MessageCircle, Activity, Timer, Filter } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -29,6 +30,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 
 interface BotToken {
   id: string;
@@ -39,6 +50,9 @@ interface BotToken {
 interface ScrapedUser {
   id: string;
   username: string;
+  role?: string;
+  lastActive?: Date;
+  isOnline?: boolean;
 }
 
 interface SavedList {
@@ -56,6 +70,12 @@ interface MessageStatus {
   error?: string;
 }
 
+interface UserFilter {
+  role: string | null;
+  activeWithin24h: boolean;
+  onlineOnly: boolean;
+}
+
 export const DiscordScraper = () => {
   const [tokens, setTokens] = useState<BotToken[]>([]);
   const [newToken, setNewToken] = useState('');
@@ -67,6 +87,17 @@ export const DiscordScraper = () => {
   const [newListName, setNewListName] = useState('');
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [filterDialogOpen, setFilterDialogOpen] = useState(false);
+  
+  // New state for user filtering
+  const [userFilter, setUserFilter] = useState<UserFilter>({
+    role: null,
+    activeWithin24h: false,
+    onlineOnly: false
+  });
+  const [availableRoles, setAvailableRoles] = useState<string[]>([
+    "Admin", "Moderator", "VIP", "Member", "New User"
+  ]);
   
   // New state for broadcast tracking
   const [isBroadcasting, setIsBroadcasting] = useState(false);
@@ -132,10 +163,13 @@ export const DiscordScraper = () => {
     });
     // Aqui você implementará a lógica de scraping
 
-    // Mock data for now
+    // Mock data for now - enhanced with roles and last active info
     const mockUsers: ScrapedUser[] = Array(15).fill(null).map((_, i) => ({
       id: `user_${i+1}`,
-      username: `discord_user_${i+1}`
+      username: `discord_user_${i+1}`,
+      role: availableRoles[Math.floor(Math.random() * availableRoles.length)],
+      lastActive: new Date(Date.now() - Math.floor(Math.random() * 3 * 24 * 60 * 60 * 1000)),
+      isOnline: Math.random() > 0.5
     }));
     
     setScrapedUsers(mockUsers);
@@ -191,6 +225,67 @@ export const DiscordScraper = () => {
     toast({
       title: "Lista removida",
       description: "A lista foi removida com sucesso",
+    });
+  };
+
+  // New function to filter users
+  const applyFilters = () => {
+    const list = savedLists.find(list => list.id === selectedListId);
+    if (!list) {
+      toast({
+        title: "Erro",
+        description: "Selecione uma lista para filtrar",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    let filteredUsers = [...list.users];
+    
+    // Apply role filter
+    if (userFilter.role) {
+      filteredUsers = filteredUsers.filter(user => user.role === userFilter.role);
+    }
+    
+    // Apply active within 24h filter
+    if (userFilter.activeWithin24h) {
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      filteredUsers = filteredUsers.filter(user => 
+        user.lastActive && new Date(user.lastActive) > oneDayAgo
+      );
+    }
+    
+    // Apply online only filter
+    if (userFilter.onlineOnly) {
+      filteredUsers = filteredUsers.filter(user => user.isOnline);
+    }
+    
+    setScrapedUsers(filteredUsers);
+    setFilterDialogOpen(false);
+    
+    toast({
+      title: "Filtros aplicados",
+      description: `${filteredUsers.length} usuários encontrados com os filtros atuais`,
+    });
+  };
+
+  const resetFilters = () => {
+    setUserFilter({
+      role: null,
+      activeWithin24h: false,
+      onlineOnly: false
+    });
+    
+    const list = savedLists.find(list => list.id === selectedListId);
+    if (list) {
+      setScrapedUsers(list.users);
+    }
+    
+    setFilterDialogOpen(false);
+    
+    toast({
+      title: "Filtros resetados",
+      description: "Todos os filtros foram removidos",
     });
   };
 
@@ -447,25 +542,61 @@ export const DiscordScraper = () => {
           </div>
           
           <div className="md:w-1/2 space-y-2">
-            <div className="font-medium text-sm">Usuários da Lista Atual</div>
+            <div className="flex justify-between items-center">
+              <div className="font-medium text-sm">Usuários da Lista Atual</div>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex items-center gap-1"
+                  onClick={() => setFilterDialogOpen(true)}
+                  disabled={!selectedListId}
+                >
+                  <Filter className="h-3.5 w-3.5" />
+                  Filtrar
+                </Button>
+              </div>
+            </div>
             <div className="p-4 border rounded-md bg-secondary/10 max-h-[200px] overflow-y-auto">
               {scrapedUsers.length === 0 ? (
                 <div className="text-center text-muted-foreground text-sm">
                   Nenhum usuário extraído ainda
                 </div>
               ) : (
-                <>
-                  <div className="flex justify-between text-xs text-muted-foreground mb-2 px-2">
-                    <span>ID</span>
-                    <span>Nome de Usuário</span>
-                  </div>
-                  {scrapedUsers.map(user => (
-                    <div key={user.id} className="flex justify-between text-sm py-1 px-2 hover:bg-secondary/20 rounded">
-                      <span className="font-mono">{user.id}</span>
-                      <span>{user.username}</span>
-                    </div>
-                  ))}
-                </>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[80px]">ID</TableHead>
+                      <TableHead>Usuário</TableHead>
+                      <TableHead>Cargo</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Última Atividade</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {scrapedUsers.map(user => (
+                      <TableRow key={user.id}>
+                        <TableCell className="font-mono text-xs">{user.id.slice(0, 6)}...</TableCell>
+                        <TableCell>{user.username}</TableCell>
+                        <TableCell>
+                          {user.role && (
+                            <Badge variant="outline">{user.role}</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {user.isOnline ? (
+                            <Badge className="bg-green-500">Online</Badge>
+                          ) : (
+                            <Badge variant="outline">Offline</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          {user.lastActive ? new Date(user.lastActive).toLocaleString() : 'Desconhecido'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </div>
             {scrapedUsers.length > 0 && (
@@ -523,6 +654,77 @@ export const DiscordScraper = () => {
             <Button onClick={saveUserList} className="gap-2">
               <Save className="h-4 w-4" />
               Salvar Lista
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Dialog for filtering users */}
+      <Dialog open={filterDialogOpen} onOpenChange={setFilterDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Filtrar Usuários</DialogTitle>
+            <DialogDescription>
+              Defina critérios para filtrar os usuários da lista selecionada.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Filtrar por Cargo</label>
+              <Select 
+                value={userFilter.role || ""} 
+                onValueChange={(value) => setUserFilter({...userFilter, role: value || null})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um cargo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Todos os cargos</SelectItem>
+                  {availableRoles.map(role => (
+                    <SelectItem key={role} value={role}>{role}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="activeWithin24h" 
+                checked={userFilter.activeWithin24h}
+                onCheckedChange={(checked) => 
+                  setUserFilter({...userFilter, activeWithin24h: checked as boolean})
+                }
+              />
+              <label 
+                htmlFor="activeWithin24h" 
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Ativos nas últimas 24 horas
+              </label>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="onlineOnly" 
+                checked={userFilter.onlineOnly}
+                onCheckedChange={(checked) => 
+                  setUserFilter({...userFilter, onlineOnly: checked as boolean})
+                }
+              />
+              <label 
+                htmlFor="onlineOnly" 
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Apenas usuários online
+              </label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={resetFilters}>
+              Limpar Filtros
+            </Button>
+            <Button onClick={applyFilters}>
+              Aplicar Filtros
             </Button>
           </DialogFooter>
         </DialogContent>
