@@ -229,11 +229,19 @@ export const extractDiscordUsers = async (
 
 // Funções para gerenciar grupos de usuários
 export const createUserGroup = async (name: string, description?: string): Promise<DiscordUserGroup> => {
+  // Obter o ID do usuário atualmente autenticado
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
+
   const { data, error } = await supabase
     .from('discord_user_groups')
     .insert({
       name,
-      description
+      description,
+      leader_id: user.id // Usar o ID do usuário autenticado como leader_id
     })
     .select()
     .single();
