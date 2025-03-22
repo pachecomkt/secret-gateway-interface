@@ -81,11 +81,20 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
 
 export const inviteUserToGroup = async (groupId: string, userEmail: string): Promise<boolean> => {
   // First, get the user ID from the email using our RPC function
-  const { data: userId, error: userError } = await supabase
+  const { data: userData, error: userError } = await supabase
     .rpc('get_user_id_from_email', { email: userEmail });
     
-  if (userError || userId === null) {
+  if (userError || userData === null) {
     console.error('User not found:', userError);
+    return false;
+  }
+  
+  // The RPC function should return a string (user ID) or null
+  // Fix the type issue by explicitly checking the type
+  const userId = userData as string;
+  
+  if (!userId) {
+    console.error('User ID not found for email:', userEmail);
     return false;
   }
   
@@ -94,7 +103,7 @@ export const inviteUserToGroup = async (groupId: string, userEmail: string): Pro
     .from('discord_group_members')
     .insert({
       group_id: groupId,
-      user_id: userId as string
+      user_id: userId
     });
     
   if (error) {
