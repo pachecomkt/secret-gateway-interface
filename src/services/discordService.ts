@@ -306,10 +306,10 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
 
 export const inviteUserToGroup = async (groupId: string, userEmail: string): Promise<boolean> => {
   // Primeiro, busca o ID do usuário a partir do e-mail
-  const { data: user, error: userError } = await supabase
+  const { data: userId, error: userError } = await supabase
     .rpc('get_user_id_from_email', { email: userEmail });
     
-  if (userError || !user) {
+  if (userError || userId === null) {
     console.error('Usuário não encontrado:', userError);
     return false;
   }
@@ -319,7 +319,7 @@ export const inviteUserToGroup = async (groupId: string, userEmail: string): Pro
     .from('discord_group_members')
     .insert({
       group_id: groupId,
-      user_id: user
+      user_id: userId
     });
     
   if (error) {
