@@ -31,9 +31,30 @@ export const createUserGroup = async (name: string, description?: string): Promi
 
 export const getUserGroups = async (): Promise<DiscordUserGroup[]> => {
   // Fetch groups that the user leads or is a member of
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+  
+  // First get the IDs of groups the user is a member of
+  const { data: memberGroups, error: memberError } = await supabase
+    .from('discord_group_members')
+    .select('group_id')
+    .eq('user_id', user.id);
+    
+  if (memberError) {
+    console.error('Error fetching member groups:', memberError);
+    throw memberError;
+  }
+  
+  const memberGroupIds = memberGroups ? memberGroups.map(group => group.group_id) : [];
+  
+  // Then fetch all groups where the user is either a leader or a member
   const { data: groups, error } = await supabase
     .from('discord_user_groups')
     .select('*')
+    .or(`leader_id.eq.${user.id}${memberGroupIds.length > 0 ? `,id.in.(${memberGroupIds.join(',')})` : ''}`)
     .order('created_at', { ascending: false });
     
   if (error) {
@@ -66,9 +87,15 @@ export const getUserGroups = async (): Promise<DiscordUserGroup[]> => {
 };
 
 export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> => {
-  const { data, error } = await supabase
+  // Fetch group members with additional user information
+  const { data: members, error } = await supabase
     .from('discord_group_members')
-    .select('*')
+    .select(`
+      id,
+      group_id,
+      user_id,
+      joined_at
+    `)
     .eq('group_id', groupId);
     
   if (error) {
@@ -76,7 +103,30 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
     throw error;
   }
   
-  return data || [];
+  // Enhance the members data with user information if available
+  const enhancedMembers: GroupMember[] = await Promise.all(
+    (members || []).map(async (member) => {
+      try {
+        // Attempt to get user email/name from auth.users (via RPC function to avoid RLS issues)
+        const { data: userData } = await supabase
+          .rpc('get_user_info_from_id', { user_id: member.user_id });
+          
+        return {
+          ...member,
+          user_email: userData?.email || undefined,
+          user_name: userData?.name || `User ${member.user_id.substring(0, 8)}...`
+        };
+      } catch (err) {
+        console.error(`Error fetching user info for ${member.user_id}:`, err);
+        return {
+          ...member,
+          user_name: `User ${member.user_id.substring(0, 8)}...`
+        };
+      }
+    })
+  );
+  
+  return enhancedMembers;
 };
 
 export const inviteUserToGroup = async (groupId: string, userEmail: string): Promise<boolean> => {
@@ -84,17 +134,40 @@ export const inviteUserToGroup = async (groupId: string, userEmail: string): Pro
   const { data, error: userError } = await supabase
     .rpc('get_user_id_from_email', { email: userEmail });
     
-  if (userError || data === null) {
-    console.error('User not found:', userError);
+  if (userError) {
+    console.error('Error finding user:', userError);
     return false;
   }
   
-  // Properly handle the return type from the RPC function
-  // The RPC function returns UUID which is a string in JS
-  const userId = data as string;
+  // The RPC function returns null if no user is found
+  if (data === null) {
+    console.error('User not found with email:', userEmail);
+    return false;
+  }
+  
+  // Properly cast the UUID to string
+  const userId: string = data as string;
   
   if (!userId) {
     console.error('User ID not found for email:', userEmail);
+    return false;
+  }
+  
+  // Check if user is already a member of the group
+  const { data: existingMember, error: checkError } = await supabase
+    .from('discord_group_members')
+    .select('id')
+    .eq('group_id', groupId)
+    .eq('user_id', userId)
+    .maybeSingle();
+    
+  if (checkError) {
+    console.error('Error checking existing membership:', checkError);
+    return false;
+  }
+  
+  if (existingMember) {
+    console.log('User is already a member of this group');
     return false;
   }
   
@@ -114,7 +187,7 @@ export const inviteUserToGroup = async (groupId: string, userEmail: string): Pro
   return true;
 };
 
-export const removeUserFromGroup = async (memberId: string): Promise<void> => {
+export const removeUserFromGroup = async (memberId: string): Promise<boolean> => {
   const { error } = await supabase
     .from('discord_group_members')
     .delete()
@@ -122,18 +195,61 @@ export const removeUserFromGroup = async (memberId: string): Promise<void> => {
     
   if (error) {
     console.error('Error removing member from group:', error);
-    throw error;
+    return false;
+  }
+  
+  return true;
+};
+
+export const deleteUserGroup = async (groupId: string): Promise<boolean> => {
+  try {
+    // First remove all members from the group
+    const { error: membersError } = await supabase
+      .from('discord_group_members')
+      .delete()
+      .eq('group_id', groupId);
+      
+    if (membersError) {
+      console.error('Error removing group members:', membersError);
+      throw membersError;
+    }
+    
+    // Then delete the group itself
+    const { error } = await supabase
+      .from('discord_user_groups')
+      .delete()
+      .eq('id', groupId);
+      
+    if (error) {
+      console.error('Error deleting group:', error);
+      throw error;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error in deleteUserGroup:', error);
+    return false;
   }
 };
 
-export const deleteUserGroup = async (groupId: string): Promise<void> => {
-  const { error } = await supabase
-    .from('discord_user_groups')
-    .delete()
-    .eq('id', groupId);
-    
-  if (error) {
-    console.error('Error deleting group:', error);
-    throw error;
+// Function to check if user is a group leader
+export const isGroupLeader = async (groupId: string): Promise<boolean> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    return false;
   }
+  
+  const { data, error } = await supabase
+    .from('discord_user_groups')
+    .select('id')
+    .eq('id', groupId)
+    .eq('leader_id', user.id)
+    .maybeSingle();
+    
+  if (error || !data) {
+    return false;
+  }
+  
+  return true;
 };
