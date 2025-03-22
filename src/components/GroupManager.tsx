@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +41,8 @@ import {
   removeGroupMember,
   isGroupLeader,
   updateMemberDisplayName,
-  generateGroupInviteLink
+  generateGroupInviteLink,
+  deleteDiscordUserGroup
 } from '@/services/discordUserGroupService';
 import { DiscordUserGroup, GroupMember } from '@/types/discord.types';
 
