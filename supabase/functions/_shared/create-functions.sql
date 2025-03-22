@@ -33,16 +33,29 @@ SECURITY DEFINER
 AS $$
 DECLARE
   server_info JSON;
+  token_text TEXT;
 BEGIN
-  -- This is a placeholder function. In a real implementation, 
-  -- you would call the Discord API to get server information.
-  -- For now, we'll return a mock response
-  server_info := json_build_object(
-    'id', server_id,
-    'name', 'Discord Server #' || substring(server_id, 1, 4),
-    'icon_url', 'https://cdn.discordapp.com/embed/avatars/0.png',
-    'member_count', floor(random() * 1000) + 100
-  );
+  -- Get the bot token
+  SELECT token INTO token_text FROM public.discord_bot_tokens WHERE id = bot_token_id;
+  
+  -- If we're in development/test mode, return mock data
+  IF token_text IS NULL OR token_text = '' THEN
+    server_info := json_build_object(
+      'id', server_id,
+      'name', 'Discord Server #' || substring(server_id, 1, 4),
+      'icon_url', 'https://cdn.discordapp.com/embed/avatars/0.png',
+      'member_count', floor(random() * 1000) + 100
+    );
+  ELSE
+    -- In a real implementation, this would call the Discord API
+    -- For now, we'll still return mock data
+    server_info := json_build_object(
+      'id', server_id,
+      'name', 'Discord Server #' || substring(server_id, 1, 4),
+      'icon_url', 'https://cdn.discordapp.com/embed/avatars/0.png',
+      'member_count', floor(random() * 1000) + 100
+    );
+  END IF;
   
   RETURN server_info;
 END;

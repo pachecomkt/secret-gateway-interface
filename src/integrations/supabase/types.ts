@@ -56,18 +56,21 @@ export type Database = {
       }
       discord_group_members: {
         Row: {
+          display_name: string | null
           group_id: string
           id: string
           joined_at: string
           user_id: string
         }
         Insert: {
+          display_name?: string | null
           group_id: string
           id?: string
           joined_at?: string
           user_id: string
         }
         Update: {
+          display_name?: string | null
           group_id?: string
           id?: string
           joined_at?: string

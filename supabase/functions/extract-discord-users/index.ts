@@ -83,6 +83,31 @@ serve(async (req) => {
       );
     }
 
+    // Call Discord API to get server information first
+    const serverApiUrl = `https://discord.com/api/v10/guilds/${serverId}`;
+    const serverResponse = await fetch(serverApiUrl, {
+      headers: {
+        'Authorization': `Bot ${botToken.token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    let serverInfo = null;
+    if (serverResponse.ok) {
+      serverInfo = await serverResponse.json();
+      console.log(`Servidor encontrado: ${serverInfo.name}`);
+    } else {
+      const errorData = await serverResponse.json();
+      return new Response(
+        JSON.stringify({ 
+          error: 'Erro ao obter informações do servidor Discord', 
+          details: errorData,
+          status: serverResponse.status
+        }),
+        { status: serverResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Call Discord API to fetch users
     console.log(`Extraindo usuários do servidor ${serverId} com token ${tokenId}...`);
     
@@ -218,7 +243,7 @@ serve(async (req) => {
     const { data: newList, error: listError } = await supabase
       .from('discord_user_lists')
       .insert({
-        name: listName || `Lista do servidor ${serverId}`,
+        name: listName || `Lista do servidor ${serverInfo?.name || serverId}`,
         description: listDescription || `Extraído em ${new Date().toISOString()}`,
         created_by: user.id
       })
@@ -253,14 +278,22 @@ serve(async (req) => {
       );
     }
     
-    // Return success response
+    // Return success response with server preview
     return new Response(
       JSON.stringify({
         success: true,
         message: `${filteredMembers.length} usuários extraídos com sucesso`,
         listId: newList.id,
         listName: newList.name,
-        users: filteredMembers
+        users: filteredMembers,
+        serverInfo: {
+          id: serverInfo.id,
+          name: serverInfo.name,
+          icon_url: serverInfo.icon 
+            ? `https://cdn.discordapp.com/icons/${serverInfo.id}/${serverInfo.icon}.png` 
+            : null,
+          member_count: serverInfo.approximate_member_count || filteredMembers.length
+        }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

@@ -50,9 +50,9 @@ export interface GroupMember {
   group_id: string;
   user_id: string;
   joined_at: string;
+  display_name?: string;
   user_email?: string;
   user_name?: string;
-  display_name?: string;
 }
 
 export interface MessageStatus {
@@ -61,4 +61,11 @@ export interface MessageStatus {
   status: 'pending' | 'sending' | 'success' | 'failed';
   timestamp: string;
   error?: string;
+}
+
+export interface ServerPreview {
+  id: string;
+  name: string;
+  icon_url: string;
+  member_count: number;
 }
