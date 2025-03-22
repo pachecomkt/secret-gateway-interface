@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash, Key, Eye, EyeOff } from "lucide-react";
+import { Plus, Trash, Key, Eye, EyeOff, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getDiscordBotTokens, saveDiscordBotToken, deleteDiscordBotToken, DiscordBotToken } from "@/services/discordService";
@@ -21,6 +21,8 @@ export const DiscordTokenPanel = ({ onTokensChange }: DiscordTokenPanelProps) =>
   const [tokens, setTokens] = useState<BotToken[]>([]);
   const [newToken, setNewToken] = useState('');
   const [showTokens, setShowTokens] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   
   const { toast } = useToast();
 
@@ -34,6 +36,7 @@ export const DiscordTokenPanel = ({ onTokensChange }: DiscordTokenPanelProps) =>
 
   const loadTokens = async () => {
     try {
+      setIsLoading(true);
       const botTokens = await getDiscordBotTokens();
       const formattedTokens = botTokens.map(token => ({
         id: token.id,
@@ -42,13 +45,17 @@ export const DiscordTokenPanel = ({ onTokensChange }: DiscordTokenPanelProps) =>
       }));
       
       setTokens(formattedTokens);
+      setErrorMessage('');
     } catch (error) {
       console.error('Error loading tokens:', error);
+      setErrorMessage('Não foi possível carregar os tokens. Verifique se você está autenticado.');
       toast({
         title: "Erro",
         description: "Não foi possível carregar os tokens dos bots",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -63,6 +70,22 @@ export const DiscordTokenPanel = ({ onTokensChange }: DiscordTokenPanelProps) =>
     }
     
     try {
+      setIsLoading(true);
+      setErrorMessage('');
+      
+      // Check if the user is authenticated by using auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setErrorMessage('Você precisa estar autenticado para adicionar tokens.');
+        toast({
+          title: "Erro de Autenticação",
+          description: "Você precisa estar autenticado para adicionar tokens",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       const savedToken = await saveDiscordBotToken(newToken);
       
       setTokens([...tokens, { 
@@ -79,11 +102,14 @@ export const DiscordTokenPanel = ({ onTokensChange }: DiscordTokenPanelProps) =>
       });
     } catch (error) {
       console.error('Error adding token:', error);
+      setErrorMessage('Erro ao adicionar token. Verifique se você tem permissões.');
       toast({
         title: "Erro",
         description: "Não foi possível adicionar o token",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -95,6 +121,8 @@ export const DiscordTokenPanel = ({ onTokensChange }: DiscordTokenPanelProps) =>
 
   const removeToken = async (id: string) => {
     try {
+      setIsLoading(true);
+      setErrorMessage('');
       await deleteDiscordBotToken(id);
       
       setTokens(tokens.filter(token => token.id !== id));
@@ -105,11 +133,14 @@ export const DiscordTokenPanel = ({ onTokensChange }: DiscordTokenPanelProps) =>
       });
     } catch (error) {
       console.error('Error removing token:', error);
+      setErrorMessage('Erro ao remover token. Verifique se você tem permissões.');
       toast({
         title: "Erro",
         description: "Não foi possível remover o token",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -124,6 +155,16 @@ export const DiscordTokenPanel = ({ onTokensChange }: DiscordTokenPanelProps) =>
           Crie seus tokens no painel Developer do Discord e certifique-se de que os bots estejam no servidor alvo.
         </AlertDescription>
       </Alert>
+      
+      {errorMessage && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            {errorMessage}
+          </AlertDescription>
+        </Alert>
+      )}
+      
       <div className="flex gap-2">
         <div className="flex-1">
           <Input
@@ -141,45 +182,58 @@ export const DiscordTokenPanel = ({ onTokensChange }: DiscordTokenPanelProps) =>
         >
           {showTokens ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </Button>
-        <Button onClick={addToken}>
-          <Plus className="h-4 w-4 mr-2" />
-          Adicionar Token
+        <Button onClick={addToken} disabled={isLoading}>
+          {isLoading ? (
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+          ) : (
+            <Plus className="h-4 w-4 mr-2" />
+          )}
+          {isLoading ? "Adicionando..." : "Adicionar Token"}
         </Button>
       </div>
 
       <div className="space-y-2">
-        {tokens.map((token, index) => (
-          <div
-            key={token.id}
-            className="flex items-center justify-between bg-secondary/30 p-3 rounded-md"
-          >
-            <div className="flex items-center gap-2">
-              <span className="flex items-center justify-center bg-primary/10 text-primary rounded-full w-6 h-6 text-sm font-medium">
-                {index + 1}
-              </span>
-              <Key className="h-4 w-4" />
-              <span className="font-mono">
-                {token.visible ? token.token : token.token.replace(/./g, '•')}
-              </span>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => toggleTokenVisibility(token.id)}
-              >
-                {token.visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => removeToken(token.id)}
-              >
-                <Trash className="h-4 w-4 text-destructive-foreground" />
-              </Button>
-            </div>
+        {tokens.length === 0 ? (
+          <div className="text-center p-6 border border-dashed rounded-md text-muted-foreground">
+            <Key className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p>Nenhum token adicionado</p>
+            <p className="text-sm">Adicione seu primeiro token para começar</p>
           </div>
-        ))}
+        ) : (
+          tokens.map((token, index) => (
+            <div
+              key={token.id}
+              className="flex items-center justify-between bg-secondary/30 p-3 rounded-md"
+            >
+              <div className="flex items-center gap-2">
+                <span className="flex items-center justify-center bg-primary/10 text-primary rounded-full w-6 h-6 text-sm font-medium">
+                  {index + 1}
+                </span>
+                <Key className="h-4 w-4" />
+                <span className="font-mono">
+                  {token.visible ? token.token : token.token.replace(/./g, '•')}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => toggleTokenVisibility(token.id)}
+                >
+                  {token.visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeToken(token.id)}
+                  disabled={isLoading}
+                >
+                  <Trash className="h-4 w-4 text-destructive-foreground" />
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

@@ -24,3 +24,26 @@ AS $$
   WHERE id = user_id
   LIMIT 1;
 $$;
+
+-- Function to get Discord server preview information
+CREATE OR REPLACE FUNCTION public.get_discord_server_preview(server_id TEXT, bot_token_id UUID)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  server_info JSON;
+BEGIN
+  -- This is a placeholder function. In a real implementation, 
+  -- you would call the Discord API to get server information.
+  -- For now, we'll return a mock response
+  server_info := json_build_object(
+    'id', server_id,
+    'name', 'Discord Server #' || substring(server_id, 1, 4),
+    'icon_url', 'https://cdn.discordapp.com/embed/avatars/0.png',
+    'member_count', floor(random() * 1000) + 100
+  );
+  
+  RETURN server_info;
+END;
+$$;

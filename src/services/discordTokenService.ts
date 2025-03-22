@@ -4,6 +4,12 @@ import { DiscordBotToken } from "@/types/discord.types";
 
 // Functions for managing bot tokens
 export const getDiscordBotTokens = async (): Promise<DiscordBotToken[]> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    return [];
+  }
+
   const { data, error } = await supabase
     .from('discord_bot_tokens')
     .select('*')
@@ -18,11 +24,18 @@ export const getDiscordBotTokens = async (): Promise<DiscordBotToken[]> => {
 };
 
 export const saveDiscordBotToken = async (token: string, description?: string): Promise<DiscordBotToken> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
   const { data, error } = await supabase
     .from('discord_bot_tokens')
     .insert({
       token,
-      description
+      description,
+      created_by: user.id
     })
     .select()
     .single();
@@ -36,10 +49,17 @@ export const saveDiscordBotToken = async (token: string, description?: string): 
 };
 
 export const deleteDiscordBotToken = async (id: string): Promise<void> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
   const { error } = await supabase
     .from('discord_bot_tokens')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('created_by', user.id);
     
   if (error) {
     console.error('Error deleting token:', error);

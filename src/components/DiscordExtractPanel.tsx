@@ -1,13 +1,14 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Server, Filter, Download } from "lucide-react";
+import { Server, Filter, Download, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { UserFilter, DiscordUser } from "@/types/discord.types";
 import { extractDiscordUsers } from "@/services/discordExtractService";
 
@@ -16,10 +17,20 @@ interface DiscordExtractPanelProps {
   onUsersExtracted: (listId: string, users: DiscordUser[]) => void;
 }
 
+interface ServerPreview {
+  id: string;
+  name: string;
+  iconUrl?: string;
+  bannerUrl?: string;
+  memberCount?: number;
+}
+
 export const DiscordExtractPanel = ({ tokenId, onUsersExtracted }: DiscordExtractPanelProps) => {
   const [serverId, setServerId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [filterDialogOpen, setFilterDialogOpen] = useState(false);
+  const [serverPreview, setServerPreview] = useState<ServerPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   
   // User filtering
   const [userFilter, setUserFilter] = useState<UserFilter>({
@@ -35,6 +46,40 @@ export const DiscordExtractPanel = ({ tokenId, onUsersExtracted }: DiscordExtrac
   const [roleIdInput, setRoleIdInput] = useState("");
   
   const { toast } = useToast();
+
+  // Fetch server preview when serverId changes
+  useEffect(() => {
+    if (serverId && serverId.length > 5 && tokenId) {
+      fetchServerPreview();
+    } else {
+      setServerPreview(null);
+    }
+  }, [serverId, tokenId]);
+
+  const fetchServerPreview = async () => {
+    if (!tokenId) return;
+    
+    setPreviewLoading(true);
+    
+    try {
+      // Simulate server preview fetch for now
+      // In a real implementation, this would call a Supabase Edge Function
+      // that uses the Discord API to get server details
+      setTimeout(() => {
+        setServerPreview({
+          id: serverId,
+          name: `Discord Server #${serverId.slice(0, 4)}`,
+          iconUrl: 'https://cdn.discordapp.com/embed/avatars/0.png',
+          memberCount: Math.floor(Math.random() * 1000) + 100
+        });
+        setPreviewLoading(false);
+      }, 500);
+    } catch (error) {
+      console.error('Error fetching server preview:', error);
+      setServerPreview(null);
+      setPreviewLoading(false);
+    }
+  };
 
   const scrapeUsers = async () => {
     if (!serverId) {
@@ -162,6 +207,34 @@ export const DiscordExtractPanel = ({ tokenId, onUsersExtracted }: DiscordExtrac
           Filtros
         </Button>
       </div>
+      
+      {/* Server preview */}
+      {previewLoading && (
+        <div className="mt-2 p-3 border rounded-md bg-secondary/10 animate-pulse">
+          <p className="text-sm text-muted-foreground">Carregando informações do servidor...</p>
+        </div>
+      )}
+      
+      {!previewLoading && serverPreview && (
+        <div className="mt-2 p-3 border rounded-md bg-secondary/10">
+          <div className="flex items-center gap-3">
+            {serverPreview.iconUrl && (
+              <img 
+                src={serverPreview.iconUrl} 
+                alt="Server icon" 
+                className="w-10 h-10 rounded-full"
+              />
+            )}
+            <div>
+              <p className="font-medium">{serverPreview.name}</p>
+              <p className="text-xs text-muted-foreground">
+                ID: {serverPreview.id}
+                {serverPreview.memberCount && ` • ${serverPreview.memberCount} membros`}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Show filter info if any filter is active */}
       {(userFilter.role || userFilter.roleId || userFilter.activeWithin24h || userFilter.activeWithin72h || userFilter.onlineOnly) && (

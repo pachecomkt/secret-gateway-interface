@@ -26,6 +26,19 @@ export const createUserGroup = async (name: string, description?: string): Promi
     throw error;
   }
   
+  // After creating the group, add the leader as a member automatically
+  try {
+    await supabase
+      .from('discord_group_members')
+      .insert({
+        group_id: data.id,
+        user_id: user.id
+      });
+  } catch (memberError) {
+    console.error('Error adding leader as member:', memberError);
+    // Continue despite this error, as the group was created successfully
+  }
+  
   return data;
 };
 
@@ -94,7 +107,8 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
       id,
       group_id,
       user_id,
-      joined_at
+      joined_at,
+      display_name
     `)
     .eq('group_id', groupId);
     
@@ -108,19 +122,28 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
     (members || []).map(async (member) => {
       try {
         // Attempt to get user email/name from auth.users (via RPC function to avoid RLS issues)
-        const { data: userData } = await supabase
+        const { data: userData, error: userError } = await supabase
           .rpc('get_user_info_from_id', { user_id: member.user_id });
           
+        if (userError) {
+          console.error(`Error fetching user info for ${member.user_id}:`, userError);
+          return {
+            ...member,
+            user_name: member.display_name || `User ${member.user_id.substring(0, 8)}...`,
+            user_email: undefined
+          };
+        }
+        
         return {
           ...member,
           user_email: userData?.email || undefined,
-          user_name: userData?.name || `User ${member.user_id.substring(0, 8)}...`
+          user_name: member.display_name || userData?.name || `User ${member.user_id.substring(0, 8)}...`
         };
       } catch (err) {
         console.error(`Error fetching user info for ${member.user_id}:`, err);
         return {
           ...member,
-          user_name: `User ${member.user_id.substring(0, 8)}...`
+          user_name: member.display_name || `User ${member.user_id.substring(0, 8)}...`
         };
       }
     })
@@ -129,62 +152,78 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
   return enhancedMembers;
 };
 
-export const inviteUserToGroup = async (groupId: string, userEmail: string): Promise<boolean> => {
-  // First, get the user ID from the email using our RPC function
-  const { data, error: userError } = await supabase
-    .rpc('get_user_id_from_email', { email: userEmail });
+export const inviteUserToGroup = async (groupId: string, userEmail: string): Promise<{success: boolean, message: string}> => {
+  try {
+    // First, get the user ID from the email using our RPC function
+    const { data: userId, error: userError } = await supabase
+      .rpc('get_user_id_from_email', { email: userEmail });
+      
+    if (userError) {
+      console.error('Error finding user:', userError);
+      return { success: false, message: 'Error locating user with the provided email.' };
+    }
     
-  if (userError) {
-    console.error('Error finding user:', userError);
-    return false;
-  }
-  
-  // The RPC function returns null if no user is found
-  if (data === null) {
-    console.error('User not found with email:', userEmail);
-    return false;
-  }
-  
-  // Properly cast the UUID to string
-  const userId: string = data as string;
-  
-  if (!userId) {
-    console.error('User ID not found for email:', userEmail);
-    return false;
-  }
-  
-  // Check if user is already a member of the group
-  const { data: existingMember, error: checkError } = await supabase
-    .from('discord_group_members')
-    .select('id')
-    .eq('group_id', groupId)
-    .eq('user_id', userId)
-    .maybeSingle();
+    // The RPC function returns null if no user is found
+    if (userId === null) {
+      console.error('User not found with email:', userEmail);
+      return { success: false, message: 'No user found with this email address.' };
+    }
     
-  if (checkError) {
-    console.error('Error checking existing membership:', checkError);
-    return false;
-  }
-  
-  if (existingMember) {
-    console.log('User is already a member of this group');
-    return false;
-  }
-  
-  // Now add the user to the group
-  const { error } = await supabase
-    .from('discord_group_members')
-    .insert({
-      group_id: groupId,
-      user_id: userId
-    });
+    // Check if user is already a member of the group
+    const { data: existingMember, error: checkError } = await supabase
+      .from('discord_group_members')
+      .select('id')
+      .eq('group_id', groupId)
+      .eq('user_id', userId as string)
+      .maybeSingle();
+      
+    if (checkError) {
+      console.error('Error checking existing membership:', checkError);
+      return { success: false, message: 'Error checking if user is already a member.' };
+    }
     
-  if (error) {
-    console.error('Error adding member to group:', error);
+    if (existingMember) {
+      console.log('User is already a member of this group');
+      return { success: false, message: 'User is already a member of this group.' };
+    }
+    
+    // Now add the user to the group
+    const { error } = await supabase
+      .from('discord_group_members')
+      .insert({
+        group_id: groupId,
+        user_id: userId as string
+      });
+      
+    if (error) {
+      console.error('Error adding member to group:', error);
+      return { success: false, message: 'Error adding member to the group.' };
+    }
+    
+    return { success: true, message: 'User successfully invited to the group!' };
+  } catch (error) {
+    console.error('Unexpected error in inviteUserToGroup:', error);
+    return { success: false, message: 'An unexpected error occurred.' };
+  }
+};
+
+export const updateMemberDisplayName = async (memberId: string, displayName: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('discord_group_members')
+      .update({ display_name: displayName })
+      .eq('id', memberId);
+      
+    if (error) {
+      console.error('Error updating member display name:', error);
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error in updateMemberDisplayName:', error);
     return false;
   }
-  
-  return true;
 };
 
 export const removeUserFromGroup = async (memberId: string): Promise<boolean> => {
@@ -252,4 +291,11 @@ export const isGroupLeader = async (groupId: string): Promise<boolean> => {
   }
   
   return true;
+};
+
+// Get invitation link for a group
+export const getGroupInviteLink = async (groupId: string): Promise<string> => {
+  // Generate a frontend link for sharing
+  const baseUrl = window.location.origin;
+  return `${baseUrl}/group-invite/${groupId}`;
 };

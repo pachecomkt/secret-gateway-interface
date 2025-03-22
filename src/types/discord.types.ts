@@ -52,6 +52,7 @@ export interface GroupMember {
   joined_at: string;
   user_email?: string;
   user_name?: string;
+  display_name?: string;
 }
 
 export interface MessageStatus {

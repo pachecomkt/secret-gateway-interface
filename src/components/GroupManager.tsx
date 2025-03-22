@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -22,17 +22,29 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, UserPlus, Trash, Users, User } from "lucide-react";
+import { 
+  Plus, 
+  UserPlus, 
+  Trash, 
+  Users, 
+  User, 
+  Link as LinkIcon, 
+  Copy, 
+  Edit, 
+  Check 
+} from "lucide-react";
 import {
-  DiscordUserGroup,
-  GroupMember,
   createUserGroup,
   getUserGroups,
   getGroupMembers,
   inviteUserToGroup,
   removeUserFromGroup,
   deleteUserGroup,
-} from '@/services/discordService';
+  isGroupLeader,
+  updateMemberDisplayName,
+  getGroupInviteLink
+} from '@/services/discordUserGroupService';
+import { DiscordUserGroup, GroupMember } from '@/types/discord.types';
 
 export const GroupManager = () => {
   const [groups, setGroups] = useState<DiscordUserGroup[]>([]);
@@ -43,7 +55,12 @@ export const GroupManager = () => {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [isLeader, setIsLeader] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [inviteLink, setInviteLink] = useState('');
+  const [showInviteLink, setShowInviteLink] = useState(false);
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+  const [newDisplayName, setNewDisplayName] = useState('');
   
   const { toast } = useToast();
 
@@ -54,6 +71,11 @@ export const GroupManager = () => {
   useEffect(() => {
     if (selectedGroup) {
       loadGroupMembers(selectedGroup.id);
+      checkIfLeader(selectedGroup.id);
+      generateInviteLink(selectedGroup.id);
+    } else {
+      setIsLeader(false);
+      setInviteLink('');
     }
   }, [selectedGroup]);
 
@@ -93,6 +115,26 @@ export const GroupManager = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const checkIfLeader = async (groupId: string) => {
+    try {
+      const leaderStatus = await isGroupLeader(groupId);
+      setIsLeader(leaderStatus);
+    } catch (error) {
+      console.error('Erro ao verificar se é líder:', error);
+      setIsLeader(false);
+    }
+  };
+
+  const generateInviteLink = async (groupId: string) => {
+    try {
+      const link = await getGroupInviteLink(groupId);
+      setInviteLink(link);
+    } catch (error) {
+      console.error('Erro ao gerar link de convite:', error);
+      setInviteLink('');
     }
   };
 
@@ -143,9 +185,9 @@ export const GroupManager = () => {
 
     try {
       setIsLoading(true);
-      const success = await inviteUserToGroup(selectedGroup.id, inviteEmail);
+      const result = await inviteUserToGroup(selectedGroup.id, inviteEmail);
       
-      if (success) {
+      if (result.success) {
         await loadGroupMembers(selectedGroup.id);
         setInviteEmail('');
         setInviteDialogOpen(false);
@@ -157,7 +199,7 @@ export const GroupManager = () => {
       } else {
         toast({
           title: "Erro",
-          description: "Usuário não encontrado ou já é membro do grupo",
+          description: result.message || "Não foi possível convidar o usuário",
           variant: "destructive",
         });
       }
@@ -173,8 +215,60 @@ export const GroupManager = () => {
     }
   };
 
+  const handleUpdateMemberName = async (memberId: string) => {
+    if (!newDisplayName) {
+      setEditingMemberId(null);
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      const success = await updateMemberDisplayName(memberId, newDisplayName);
+      
+      if (success) {
+        // Update the local state
+        setGroupMembers(groupMembers.map(member => 
+          member.id === memberId 
+            ? { ...member, display_name: newDisplayName, user_name: newDisplayName } 
+            : member
+        ));
+        
+        toast({
+          title: "Sucesso",
+          description: "Nome do membro atualizado com sucesso",
+        });
+      } else {
+        toast({
+          title: "Erro",
+          description: "Não foi possível atualizar o nome do membro",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar nome do membro:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar o nome do membro",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+      setEditingMemberId(null);
+      setNewDisplayName('');
+    }
+  };
+
+  const handleCopyInviteLink = () => {
+    navigator.clipboard.writeText(inviteLink).then(() => {
+      toast({
+        title: "Copiado!",
+        description: "Link de convite copiado para a área de transferência",
+      });
+    });
+  };
+
   const handleRemoveMember = async (memberId: string) => {
-    if (!selectedGroup) return;
+    if (!selectedGroup || !isLeader) return;
     
     try {
       await removeUserFromGroup(memberId);
@@ -351,47 +445,72 @@ export const GroupManager = () => {
                       {selectedGroup.description || "Sem descrição"}
                     </CardDescription>
                   </div>
-                  <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button>
-                        <UserPlus className="h-4 w-4 mr-2" />
-                        Convidar
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Convidar Usuário</DialogTitle>
-                        <DialogDescription>
-                          Insira o e-mail do usuário que você deseja convidar para o grupo
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="py-4">
-                        <Input
-                          placeholder="Email do usuário"
-                          value={inviteEmail}
-                          onChange={(e) => setInviteEmail(e.target.value)}
-                        />
-                      </div>
-                      <DialogFooter>
-                        <Button variant="outline" onClick={() => setInviteDialogOpen(false)}>
-                          Cancelar
+                  <div className="flex gap-2">
+                    {isLeader && (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          className="flex items-center gap-1"
+                          onClick={() => setShowInviteLink(!showInviteLink)}
+                        >
+                          <LinkIcon className="h-4 w-4" />
+                          Link de Convite
                         </Button>
-                        <Button onClick={handleInviteUser} disabled={isLoading}>
-                          {isLoading ? "Convidando..." : "Convidar"}
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
+                        <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button>
+                              <UserPlus className="h-4 w-4 mr-2" />
+                              Convidar
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Convidar Usuário</DialogTitle>
+                              <DialogDescription>
+                                Insira o e-mail do usuário que você deseja convidar para o grupo
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="py-4">
+                              <Input
+                                placeholder="Email do usuário"
+                                value={inviteEmail}
+                                onChange={(e) => setInviteEmail(e.target.value)}
+                              />
+                            </div>
+                            <DialogFooter>
+                              <Button variant="outline" onClick={() => setInviteDialogOpen(false)}>
+                                Cancelar
+                              </Button>
+                              <Button onClick={handleInviteUser} disabled={isLoading}>
+                                {isLoading ? "Convidando..." : "Convidar"}
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      </>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
+                {showInviteLink && inviteLink && (
+                  <div className="mb-4 bg-secondary/20 p-3 rounded-md flex items-center justify-between">
+                    <div className="truncate text-sm font-mono mr-2">{inviteLink}</div>
+                    <Button variant="ghost" size="sm" onClick={handleCopyInviteLink}>
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+                
                 <div className="text-sm text-muted-foreground mb-4">
                   Membros do grupo: {groupMembers.length}
                 </div>
                 {groupMembers.length === 0 ? (
                   <div className="text-center p-6 border border-dashed rounded-md text-muted-foreground">
                     <p>Nenhum membro no grupo</p>
-                    <p className="text-sm">Clique em "Convidar" para adicionar membros</p>
+                    {isLeader && (
+                      <p className="text-sm">Clique em "Convidar" para adicionar membros</p>
+                    )}
                   </div>
                 ) : (
                   <Table>
@@ -399,31 +518,65 @@ export const GroupManager = () => {
                       <TableRow>
                         <TableHead>Usuário</TableHead>
                         <TableHead>Entrou em</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
+                        {isLeader && <TableHead className="text-right">Ações</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {groupMembers.map((member) => (
                         <TableRow key={member.id}>
                           <TableCell>
-                            <div className="flex items-center gap-2">
-                              <User className="h-4 w-4 text-muted-foreground" />
-                              <span>{member.user_name || member.user_id}</span>
-                            </div>
+                            {editingMemberId === member.id ? (
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  value={newDisplayName}
+                                  onChange={(e) => setNewDisplayName(e.target.value)}
+                                  placeholder="Digite um nome"
+                                  className="text-sm h-8"
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => handleUpdateMemberName(member.id)}
+                                >
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <User className="h-4 w-4 text-muted-foreground" />
+                                <span>{member.user_name || member.user_id}</span>
+                                {isLeader && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 ml-1"
+                                    onClick={() => {
+                                      setEditingMemberId(member.id);
+                                      setNewDisplayName(member.display_name || '');
+                                    }}
+                                  >
+                                    <Edit className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell>
                             {new Date(member.joined_at).toLocaleDateString()}
                           </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive"
-                              onClick={() => handleRemoveMember(member.id)}
-                            >
-                              <Trash className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
+                          {isLeader && (
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive"
+                                onClick={() => handleRemoveMember(member.id)}
+                              >
+                                <Trash className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>
