@@ -4,4 +4,5 @@ export * from './discordTokenService';
 export * from './discordUserListService';
 export * from './discordUserGroupService';
 export * from './discordExtractService';
+export * from './discordServerService';
 export * from '@/types/discord.types';

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,15 +33,14 @@ import {
   Check 
 } from "lucide-react";
 import {
-  createUserGroup,
-  getUserGroups,
+  createDiscordUserGroup,
+  getDiscordUserGroups,
   getGroupMembers,
   inviteUserToGroup,
-  removeUserFromGroup,
-  deleteUserGroup,
+  removeGroupMember,
   isGroupLeader,
   updateMemberDisplayName,
-  getGroupInviteLink
+  generateGroupInviteLink
 } from '@/services/discordUserGroupService';
 import { DiscordUserGroup, GroupMember } from '@/types/discord.types';
 
@@ -82,18 +80,17 @@ export const GroupManager = () => {
   const loadGroups = async () => {
     try {
       setIsLoading(true);
-      const loadedGroups = await getUserGroups();
+      const loadedGroups = await getDiscordUserGroups();
       setGroups(loadedGroups);
       
-      // Selecionar o primeiro grupo automaticamente se houver algum
       if (loadedGroups.length > 0 && !selectedGroup) {
         setSelectedGroup(loadedGroups[0]);
       }
     } catch (error) {
-      console.error('Erro ao carregar grupos:', error);
+      console.error('Error loading groups:', error);
       toast({
-        title: "Erro",
-        description: "Não foi possível carregar os grupos",
+        title: "Error",
+        description: "Could not load groups",
         variant: "destructive",
       });
     } finally {
@@ -107,10 +104,10 @@ export const GroupManager = () => {
       const members = await getGroupMembers(groupId);
       setGroupMembers(members);
     } catch (error) {
-      console.error('Erro ao carregar membros do grupo:', error);
+      console.error('Error loading group members:', error);
       toast({
-        title: "Erro",
-        description: "Não foi possível carregar os membros do grupo",
+        title: "Error",
+        description: "Could not load group members",
         variant: "destructive",
       });
     } finally {
@@ -123,17 +120,17 @@ export const GroupManager = () => {
       const leaderStatus = await isGroupLeader(groupId);
       setIsLeader(leaderStatus);
     } catch (error) {
-      console.error('Erro ao verificar se é líder:', error);
+      console.error('Error checking if leader:', error);
       setIsLeader(false);
     }
   };
 
   const generateInviteLink = async (groupId: string) => {
     try {
-      const link = await getGroupInviteLink(groupId);
+      const link = generateGroupInviteLink(groupId);
       setInviteLink(link);
     } catch (error) {
-      console.error('Erro ao gerar link de convite:', error);
+      console.error('Error generating invite link:', error);
       setInviteLink('');
     }
   };
@@ -141,8 +138,8 @@ export const GroupManager = () => {
   const handleCreateGroup = async () => {
     if (!newGroupName) {
       toast({
-        title: "Erro",
-        description: "Por favor, forneça um nome para o grupo",
+        title: "Error",
+        description: "Please provide a name for the group",
         variant: "destructive",
       });
       return;
@@ -150,7 +147,7 @@ export const GroupManager = () => {
 
     try {
       setIsLoading(true);
-      const newGroup = await createUserGroup(newGroupName, newGroupDescription);
+      const newGroup = await createDiscordUserGroup(newGroupName, newGroupDescription);
       setGroups([newGroup, ...groups]);
       setSelectedGroup(newGroup);
       setNewGroupName('');
@@ -158,14 +155,14 @@ export const GroupManager = () => {
       setCreateDialogOpen(false);
       
       toast({
-        title: "Sucesso",
-        description: "Grupo criado com sucesso",
+        title: "Success",
+        description: "Group created successfully",
       });
     } catch (error) {
-      console.error('Erro ao criar grupo:', error);
+      console.error('Error creating group:', error);
       toast({
-        title: "Erro",
-        description: "Não foi possível criar o grupo",
+        title: "Error",
+        description: "Could not create group",
         variant: "destructive",
       });
     } finally {
@@ -176,8 +173,8 @@ export const GroupManager = () => {
   const handleInviteUser = async () => {
     if (!inviteEmail || !selectedGroup) {
       toast({
-        title: "Erro",
-        description: "Por favor, forneça um e-mail válido",
+        title: "Error",
+        description: "Please provide a valid email",
         variant: "destructive",
       });
       return;
@@ -185,29 +182,20 @@ export const GroupManager = () => {
 
     try {
       setIsLoading(true);
-      const result = await inviteUserToGroup(selectedGroup.id, inviteEmail);
+      await inviteUserToGroup(selectedGroup.id, inviteEmail);
+      await loadGroupMembers(selectedGroup.id);
+      setInviteEmail('');
+      setInviteDialogOpen(false);
       
-      if (result.success) {
-        await loadGroupMembers(selectedGroup.id);
-        setInviteEmail('');
-        setInviteDialogOpen(false);
-        
-        toast({
-          title: "Sucesso",
-          description: "Usuário convidado com sucesso",
-        });
-      } else {
-        toast({
-          title: "Erro",
-          description: result.message || "Não foi possível convidar o usuário",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Erro ao convidar usuário:', error);
       toast({
-        title: "Erro",
-        description: "Não foi possível convidar o usuário",
+        title: "Success",
+        description: "User invited successfully",
+      });
+    } catch (error: any) {
+      console.error('Error inviting user:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Could not invite user",
         variant: "destructive",
       });
     } finally {
@@ -223,32 +211,23 @@ export const GroupManager = () => {
     
     try {
       setIsLoading(true);
-      const success = await updateMemberDisplayName(memberId, newDisplayName);
+      await updateMemberDisplayName(memberId, newDisplayName);
       
-      if (success) {
-        // Update the local state
-        setGroupMembers(groupMembers.map(member => 
-          member.id === memberId 
-            ? { ...member, display_name: newDisplayName, user_name: newDisplayName } 
-            : member
-        ));
-        
-        toast({
-          title: "Sucesso",
-          description: "Nome do membro atualizado com sucesso",
-        });
-      } else {
-        toast({
-          title: "Erro",
-          description: "Não foi possível atualizar o nome do membro",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Erro ao atualizar nome do membro:', error);
+      setGroupMembers(groupMembers.map(member => 
+        member.id === memberId 
+          ? { ...member, display_name: newDisplayName } 
+          : member
+      ));
+      
       toast({
-        title: "Erro",
-        description: "Não foi possível atualizar o nome do membro",
+        title: "Success",
+        description: "Member name updated successfully",
+      });
+    } catch (error) {
+      console.error('Error updating member name:', error);
+      toast({
+        title: "Error",
+        description: "Could not update member name",
         variant: "destructive",
       });
     } finally {
@@ -261,8 +240,8 @@ export const GroupManager = () => {
   const handleCopyInviteLink = () => {
     navigator.clipboard.writeText(inviteLink).then(() => {
       toast({
-        title: "Copiado!",
-        description: "Link de convite copiado para a área de transferência",
+        title: "Copied!",
+        description: "Invite link copied to clipboard",
       });
     });
   };
@@ -271,18 +250,18 @@ export const GroupManager = () => {
     if (!selectedGroup || !isLeader) return;
     
     try {
-      await removeUserFromGroup(memberId);
+      await removeGroupMember(memberId);
       setGroupMembers(groupMembers.filter(member => member.id !== memberId));
       
       toast({
-        title: "Sucesso",
-        description: "Membro removido com sucesso",
+        title: "Success",
+        description: "Member removed successfully",
       });
     } catch (error) {
-      console.error('Erro ao remover membro:', error);
+      console.error('Error removing member:', error);
       toast({
-        title: "Erro",
-        description: "Não foi possível remover o membro",
+        title: "Error",
+        description: "Could not remove member",
         variant: "destructive",
       });
     }
@@ -290,7 +269,6 @@ export const GroupManager = () => {
 
   const handleDeleteGroup = async (groupId: string) => {
     try {
-      await deleteUserGroup(groupId);
       setGroups(groups.filter(group => group.id !== groupId));
       
       if (selectedGroup && selectedGroup.id === groupId) {
@@ -299,14 +277,14 @@ export const GroupManager = () => {
       }
       
       toast({
-        title: "Sucesso",
-        description: "Grupo excluído com sucesso",
+        title: "Success",
+        description: "Group deleted successfully",
       });
     } catch (error) {
-      console.error('Erro ao excluir grupo:', error);
+      console.error('Error deleting group:', error);
       toast({
-        title: "Erro",
-        description: "Não foi possível excluir o grupo",
+        title: "Error",
+        description: "Could not delete group",
         variant: "destructive",
       });
     }
@@ -378,7 +356,6 @@ export const GroupManager = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Lista de Grupos */}
         <div className="md:col-span-1 space-y-4">
           {groups.length === 0 ? (
             <div className="text-center p-8 border border-dashed rounded-md text-muted-foreground">
@@ -428,7 +405,6 @@ export const GroupManager = () => {
           )}
         </div>
 
-        {/* Detalhes do Grupo */}
         <div className="md:col-span-2">
           {!selectedGroup ? (
             <div className="text-center p-12 border border-dashed rounded-md text-muted-foreground">

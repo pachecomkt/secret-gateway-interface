@@ -130,16 +130,21 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
       membersData.map(async (member) => {
         try {
           // Get user info from auth.users via RPC function
-          const { data: userData } = await supabase.rpc(
+          const { data: userData, error: userError } = await supabase.rpc(
             'get_user_info_from_id',
             { user_id: member.user_id }
           );
           
+          if (userError) {
+            console.error('Error fetching user details:', userError);
+            return member;
+          }
+          
           if (userData) {
             return {
               ...member,
-              user_email: userData.email,
-              user_name: userData.name
+              user_email: userData.email as string | undefined,
+              user_name: userData.name as string | undefined
             };
           }
           
@@ -201,7 +206,7 @@ export const inviteUserToGroup = async (
       .from('discord_group_members')
       .insert({
         group_id: groupId,
-        user_id: userId,
+        user_id: userId as string,
         display_name: displayName
       })
       .select()
@@ -376,6 +381,44 @@ export const joinGroupByInvite = async (
     return memberData;
   } catch (error) {
     console.error('Error in joinGroupByInvite:', error);
+    throw error;
+  }
+};
+
+/**
+ * Deletes a user group if the current user is the leader
+ */
+export const deleteDiscordUserGroup = async (groupId: string): Promise<void> => {
+  try {
+    // Check if user is the group leader
+    const isLeader = await isGroupLeader(groupId);
+    if (!isLeader) {
+      throw new Error('Only group leaders can delete groups');
+    }
+    
+    // Delete all members first
+    const { error: membersError } = await supabase
+      .from('discord_group_members')
+      .delete()
+      .eq('group_id', groupId);
+      
+    if (membersError) {
+      console.error('Error deleting group members:', membersError);
+      throw new Error('Failed to delete group members');
+    }
+    
+    // Delete the group
+    const { error: groupError } = await supabase
+      .from('discord_user_groups')
+      .delete()
+      .eq('id', groupId);
+      
+    if (groupError) {
+      console.error('Error deleting group:', groupError);
+      throw new Error('Failed to delete group');
+    }
+  } catch (error) {
+    console.error('Error in deleteDiscordUserGroup:', error);
     throw error;
   }
 };
