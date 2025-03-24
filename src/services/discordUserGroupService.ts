@@ -143,11 +143,8 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
     const enrichedMembers: GroupMember[] = await Promise.all(
       membersData.map(async (member) => {
         try {
-          // Specify both input and output generic types for the RPC call
-          const { data: userData, error: userError } = await supabase.rpc<
-            UserInfo,
-            GetUserInfoParams
-          >(
+          // Call the RPC function without type parameters
+          const { data: userData, error: userError } = await supabase.rpc(
             'get_user_info_from_id',
             { user_id: member.user_id }
           );
@@ -158,10 +155,12 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
           }
           
           if (userData) {
+            // Cast to any to safely access properties
+            const userInfo = userData as any;
             return {
               ...member,
-              user_email: userData.email,
-              user_name: userData.name
+              user_email: userInfo.email,
+              user_name: userInfo.name
             };
           }
           
@@ -195,19 +194,19 @@ export const inviteUserToGroup = async (
       throw new Error('Only group leaders can invite members');
     }
     
-    // Specify both input and output generic types for the RPC call
-    const { data: userId, error: userIdError } = await supabase.rpc<
-      string,
-      GetUserIdParams
-    >(
+    // Call RPC function without type parameters
+    const { data: userIdData, error: userIdError } = await supabase.rpc(
       'get_user_id_from_email',
       { email: userEmail }
     );
     
-    if (userIdError || !userId) {
+    if (userIdError || !userIdData) {
       console.error('Error finding user by email:', userIdError);
       throw new Error('User not found with this email');
     }
+    
+    // Cast to string to ensure correct type
+    const userId = String(userIdData);
     
     // Check if user is already a member
     const { data: existingMember } = await supabase
