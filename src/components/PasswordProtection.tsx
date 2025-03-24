@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Lock } from "lucide-react";
 import { validatePassword, checkPasswordStatus } from "@/services/passwordService";
+import { checkUserRole, logUserAccess, UserRole } from "@/services/authService";
 import { useToast } from "@/hooks/use-toast";
 
 interface PasswordProtectionProps {
@@ -29,7 +30,7 @@ export const PasswordProtection = ({ onUnlock }: PasswordProtectionProps) => {
     setIsLoading(true);
     
     try {
-      // Primeiro, verificar o status da senha
+      // Verificar o status da senha
       const passwordStatus = await checkPasswordStatus(password);
       console.log('Status da senha:', passwordStatus);
       
@@ -37,14 +38,21 @@ export const PasswordProtection = ({ onUnlock }: PasswordProtectionProps) => {
       const isValid = await validatePassword(password);
       console.log('Senha válida:', isValid);
       
+      // Verificar o papel do usuário
+      const userRole = await checkUserRole(password);
+      console.log('Papel do usuário:', userRole);
+      
       if (isValid) {
+        // Registrar o acesso
+        await logUserAccess(userRole, password);
+        
         let messageDescription = "Senha correta, seja bem-vindo!";
         
-        if (passwordStatus.isSuperUser) {
+        if (userRole === 'super_user') {
           messageDescription = "Bem-vindo, Super Usuário!";
-        } else if (passwordStatus.isAdmin) {
+        } else if (userRole === 'admin') {
           messageDescription = "Bem-vindo, Administrador!";
-        } else if (passwordStatus.isRegularUser) {
+        } else if (userRole === 'regular_user') {
           messageDescription = "Bem-vindo, Usuário!";
         }
         
@@ -54,10 +62,11 @@ export const PasswordProtection = ({ onUnlock }: PasswordProtectionProps) => {
           variant: "default",
         });
         
+        // Determinar as permissões com base no papel
         onUnlock(
-          passwordStatus.isAdmin, 
-          passwordStatus.isSuperUser, 
-          passwordStatus.isRegularUser
+          userRole === 'admin', 
+          userRole === 'super_user', 
+          userRole === 'regular_user'
         );
         
         setError(false);

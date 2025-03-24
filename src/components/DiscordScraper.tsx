@@ -1,13 +1,13 @@
 
 import { useState } from 'react';
 import { DiscordUser } from '@/types/discord.types';
-import { DiscordTokenPanel } from './DiscordTokenPanel';
+import { TokenPanel } from './tokens/TokenPanel';
 import { DiscordExtractPanel } from './DiscordExtractPanel';
 import { DiscordUserListPanel } from './DiscordUserListPanel';
 import { DiscordMessagingPanel } from './DiscordMessagingPanel';
 import { GroupManager } from './GroupManager';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, UserPlus, MessageSquare, List, Server, Puzzle } from "lucide-react";
+import { Users, UserPlus, MessageSquare, List, Server } from "lucide-react";
 
 interface BotToken {
   id: string;
@@ -52,7 +52,7 @@ export const DiscordScraper = () => {
       </div>
 
       {/* Step 1: Token Management */}
-      <DiscordTokenPanel onTokensChange={handleTokensChange} />
+      <TokenPanel onTokensChange={handleTokensChange} />
 
       {/* Tabs for different features */}
       <Tabs defaultValue="extract" value={activeTab} onValueChange={setActiveTab}>

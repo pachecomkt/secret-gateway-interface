@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { extractDiscordUsers } from '@/services/discordExtractService';
+import { extractDiscordUsers } from '@/services/discordService';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,6 +19,8 @@ interface DiscordExtractPanelProps {
 export const DiscordExtractPanel = ({ tokenId, onUsersExtracted }: DiscordExtractPanelProps) => {
   const [serverId, setServerId] = useState('');
   const [listName, setListName] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [roleIdFilter, setRoleIdFilter] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
   const [filters, setFilters] = useState<UserFilter>({
     role: null,
@@ -62,12 +64,25 @@ export const DiscordExtractPanel = ({ tokenId, onUsersExtracted }: DiscordExtrac
       // Generate a default list name if not provided
       const extractListName = listName || `Lista do servidor ${serverId}`;
       
+      // Apply role filters if provided
+      const updatedFilters = {
+        ...filters,
+        role: roleFilter || null,
+        roleId: roleIdFilter || null
+      };
+      
+      console.log('Extracting with filters:', updatedFilters);
+      
       const result = await extractDiscordUsers(
         serverId, 
         tokenId, 
-        filters,
+        updatedFilters,
         extractListName
       );
+      
+      if (!result.success) {
+        throw new Error(result.message);
+      }
       
       toast({
         title: "Sucesso",
@@ -135,38 +150,63 @@ export const DiscordExtractPanel = ({ tokenId, onUsersExtracted }: DiscordExtrac
               <h4 className="font-medium">Filtros</h4>
             </div>
             
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="filter-online"
-                  checked={filters.onlineOnly}
-                  onCheckedChange={(checked) => 
-                    handleFilterChange('onlineOnly', checked === true)
-                  }
+            <div className="space-y-3">
+              {/* Filtro por cargo */}
+              <div>
+                <Label htmlFor="role-filter">Filtrar por Cargo (opcional)</Label>
+                <Input
+                  id="role-filter"
+                  placeholder="Nome do cargo (ex: Administrador)"
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                  className="bg-secondary/50 mt-1"
                 />
-                <Label htmlFor="filter-online">Apenas usuários online</Label>
               </div>
               
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="filter-24h"
-                  checked={filters.activeWithin24h}
-                  onCheckedChange={(checked) => 
-                    handleFilterChange('activeWithin24h', checked === true)
-                  }
+              <div>
+                <Label htmlFor="role-id-filter">ID do Cargo (opcional)</Label>
+                <Input
+                  id="role-id-filter"
+                  placeholder="ID do cargo específico"
+                  value={roleIdFilter}
+                  onChange={(e) => setRoleIdFilter(e.target.value)}
+                  className="bg-secondary/50 mt-1"
                 />
-                <Label htmlFor="filter-24h">Ativos nas últimas 24 horas</Label>
               </div>
               
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="filter-72h"
-                  checked={filters.activeWithin72h}
-                  onCheckedChange={(checked) => 
-                    handleFilterChange('activeWithin72h', checked === true)
-                  }
-                />
-                <Label htmlFor="filter-72h">Ativos nas últimas 72 horas</Label>
+              <div className="space-y-2 pt-2">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="filter-online"
+                    checked={filters.onlineOnly}
+                    onCheckedChange={(checked) => 
+                      handleFilterChange('onlineOnly', checked === true)
+                    }
+                  />
+                  <Label htmlFor="filter-online">Apenas usuários online</Label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="filter-24h"
+                    checked={filters.activeWithin24h}
+                    onCheckedChange={(checked) => 
+                      handleFilterChange('activeWithin24h', checked === true)
+                    }
+                  />
+                  <Label htmlFor="filter-24h">Ativos nas últimas 24 horas</Label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="filter-72h"
+                    checked={filters.activeWithin72h}
+                    onCheckedChange={(checked) => 
+                      handleFilterChange('activeWithin72h', checked === true)
+                    }
+                  />
+                  <Label htmlFor="filter-72h">Ativos nas últimas 72 horas</Label>
+                </div>
               </div>
             </div>
           </CardContent>

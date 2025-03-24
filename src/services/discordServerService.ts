@@ -14,7 +14,7 @@ export const getDiscordServerPreview = async (
       throw new Error('Server ID and token ID are required');
     }
 
-    const { data, error } = await supabase.rpc(
+    const { data, error } = await supabase.rpc<ServerPreview>(
       'get_discord_server_preview',
       {
         server_id: serverId,
@@ -31,7 +31,7 @@ export const getDiscordServerPreview = async (
       throw new Error('No server information found');
     }
 
-    return data as ServerPreview;
+    return data;
   } catch (error) {
     console.error('Error in getDiscordServerPreview:', error);
     throw error;
