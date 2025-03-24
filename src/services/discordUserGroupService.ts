@@ -2,6 +2,12 @@
 import { supabase } from '@/integrations/supabase/client';
 import { DiscordUserGroup, GroupMember } from '@/types/discord.types';
 
+// Definindo interfaces para os resultados das funções RPC
+interface UserInfo {
+  email?: string;
+  name?: string;
+}
+
 /**
  * Creates a new Discord user group
  */
@@ -129,8 +135,10 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
     const enrichedMembers: GroupMember[] = await Promise.all(
       membersData.map(async (member) => {
         try {
-          // Get user info from auth.users via RPC function
-          const { data: userData, error: userError } = await supabase.rpc(
+          // Corrigindo a chamada RPC com tipagem adequada
+          const { data: userData, error: userError } = await supabase.rpc<UserInfo, {
+            user_id: string;
+          }>(
             'get_user_info_from_id',
             { user_id: member.user_id }
           );
@@ -143,8 +151,8 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
           if (userData) {
             return {
               ...member,
-              user_email: userData.email as string | undefined,
-              user_name: userData.name as string | undefined
+              user_email: userData.email,
+              user_name: userData.name
             };
           }
           
@@ -178,8 +186,10 @@ export const inviteUserToGroup = async (
       throw new Error('Only group leaders can invite members');
     }
     
-    // Get user ID from email using the RPC function
-    const { data: userId, error: userIdError } = await supabase.rpc(
+    // Corrigindo a chamada RPC com tipagem adequada
+    const { data: userId, error: userIdError } = await supabase.rpc<string, {
+      email: string;
+    }>(
       'get_user_id_from_email',
       { email: userEmail }
     );

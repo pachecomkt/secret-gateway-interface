@@ -14,7 +14,11 @@ export const getDiscordServerPreview = async (
       throw new Error('Server ID and token ID are required');
     }
 
-    const { data, error } = await supabase.rpc<ServerPreview>(
+    // Corrigindo a chamada RPC com o tipo genérico adequado
+    const { data, error } = await supabase.rpc<ServerPreview, {
+      server_id: string;
+      bot_token_id: string;
+    }>(
       'get_discord_server_preview',
       {
         server_id: serverId,
