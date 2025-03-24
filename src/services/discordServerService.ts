@@ -14,17 +14,11 @@ export const getDiscordServerPreview = async (
       throw new Error('Server ID and token ID are required');
     }
 
-    // Corrigindo a chamada RPC com o tipo genérico adequado
-    const { data, error } = await supabase.rpc<ServerPreview, {
-      server_id: string;
-      bot_token_id: string;
-    }>(
-      'get_discord_server_preview',
-      {
-        server_id: serverId,
-        bot_token_id: tokenId
-      }
-    );
+    // Correct way to type RPC calls with Supabase
+    const { data, error } = await supabase.rpc('get_discord_server_preview', {
+      server_id: serverId,
+      bot_token_id: tokenId
+    });
 
     if (error) {
       console.error('Error fetching server preview:', error);
@@ -35,7 +29,15 @@ export const getDiscordServerPreview = async (
       throw new Error('No server information found');
     }
 
-    return data;
+    // Ensure the data conforms to ServerPreview type
+    const serverPreview: ServerPreview = {
+      id: data.id || '',
+      name: data.name || '',
+      icon_url: data.icon_url || '',
+      member_count: data.member_count || 0
+    };
+
+    return serverPreview;
   } catch (error) {
     console.error('Error in getDiscordServerPreview:', error);
     throw error;
