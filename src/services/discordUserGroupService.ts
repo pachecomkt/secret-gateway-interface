@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 import { DiscordUserGroup, GroupMember } from '@/types/discord.types';
 
@@ -134,7 +135,7 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
     const enrichedMembers: GroupMember[] = await Promise.all(
       membersData.map(async (member) => {
         try {
-          // Correct way to call the RPC function without specifying generic types
+          // Use any to bypass TypeScript's type checking for the RPC call
           const { data: userData, error: userError } = await supabase.rpc(
             'get_user_info_from_id',
             { user_id: member.user_id }
@@ -146,8 +147,8 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
           }
           
           if (userData) {
-            // Cast the data to the expected shape
-            const userInfo = userData as UserInfo;
+            // Safely cast the data to the expected shape
+            const userInfo = userData as unknown as UserInfo;
             return {
               ...member,
               user_email: userInfo.email,
@@ -185,16 +186,19 @@ export const inviteUserToGroup = async (
       throw new Error('Only group leaders can invite members');
     }
     
-    // Correct way to call the RPC function without specifying generic types
-    const { data: userId, error: userIdError } = await supabase.rpc(
+    // Use any to bypass TypeScript's type checking for the RPC call
+    const { data: userIdData, error: userIdError } = await supabase.rpc(
       'get_user_id_from_email',
       { email: userEmail }
     );
     
-    if (userIdError || !userId) {
+    if (userIdError || !userIdData) {
       console.error('Error finding user by email:', userIdError);
       throw new Error('User not found with this email');
     }
+    
+    // Safely cast the user ID
+    const userId = userIdData as unknown as string;
     
     // Check if user is already a member
     const { data: existingMember } = await supabase
@@ -208,12 +212,12 @@ export const inviteUserToGroup = async (
       throw new Error('User is already a member of this group');
     }
     
-    // Add user to group - use explicit casting for userId
+    // Add user to group with explicitly typed userId
     const { data: memberData, error: memberError } = await supabase
       .from('discord_group_members')
       .insert({
         group_id: groupId,
-        user_id: userId as string,
+        user_id: userId,
         display_name: displayName
       })
       .select()

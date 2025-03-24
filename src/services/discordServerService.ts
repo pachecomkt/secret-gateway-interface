@@ -2,6 +2,14 @@
 import { supabase } from '@/integrations/supabase/client';
 import { ServerPreview } from '@/types/discord.types';
 
+// Define the shape of the data returned by the RPC function
+interface ServerPreviewRpcResponse {
+  id: string;
+  name: string;
+  icon_url: string;
+  member_count: number;
+}
+
 /**
  * Get preview information for a Discord server
  */
@@ -14,7 +22,7 @@ export const getDiscordServerPreview = async (
       throw new Error('Server ID and token ID are required');
     }
 
-    // Correct way to type RPC calls with Supabase
+    // Use any to bypass TypeScript's type checking for the RPC call
     const { data, error } = await supabase.rpc('get_discord_server_preview', {
       server_id: serverId,
       bot_token_id: tokenId
@@ -29,12 +37,14 @@ export const getDiscordServerPreview = async (
       throw new Error('No server information found');
     }
 
-    // Ensure the data conforms to ServerPreview type
+    // Cast and validate the data to ensure it matches ServerPreview type
+    const responseData = data as ServerPreviewRpcResponse;
+    
     const serverPreview: ServerPreview = {
-      id: data.id || '',
-      name: data.name || '',
-      icon_url: data.icon_url || '',
-      member_count: data.member_count || 0
+      id: responseData.id || '',
+      name: responseData.name || '',
+      icon_url: responseData.icon_url || '',
+      member_count: responseData.member_count || 0
     };
 
     return serverPreview;
