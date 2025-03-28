@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { saveDiscordBotToken } from "@/services/discordService";
+import { saveDiscordBotToken } from "@/services/discordTokenService";
 
 interface TokenFormProps {
   onTokenAdded: () => void;

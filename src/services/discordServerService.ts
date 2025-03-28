@@ -2,20 +2,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { ServerPreview } from '@/types/discord.types';
 
-// Define the shape of the data returned by the RPC function
-interface ServerPreviewRpcResponse {
-  id: string;
-  name: string;
-  icon_url: string;
-  member_count: number;
-}
-
-// Define parameters for the RPC function
-interface ServerPreviewParams {
-  server_id: string;
-  bot_token_id: string;
-}
-
 /**
  * Get preview information for a Discord server
  */
@@ -28,13 +14,13 @@ export const getDiscordServerPreview = async (
       throw new Error('Server ID and token ID are required');
     }
 
-    // Cast to the correct parameter type and use 'any' for the function name
+    // Handle the RPC call with correct parameter format
     const { data, error } = await supabase.rpc(
-      'get_discord_server_preview' as any,
+      'get_discord_server_preview',
       {
         server_id: serverId,
         bot_token_id: tokenId
-      } as ServerPreviewParams
+      }
     );
 
     if (error) {
@@ -46,15 +32,12 @@ export const getDiscordServerPreview = async (
       throw new Error('No server information found');
     }
 
-    // Cast data to any to safely access properties
-    const responseData = data as any;
-    
-    // Construct the properly typed ServerPreview object
+    // Parse the returned data correctly
     const serverPreview: ServerPreview = {
-      id: responseData.id || '',
-      name: responseData.name || '',
-      icon_url: responseData.icon_url || '',
-      member_count: responseData.member_count || 0
+      id: data.id || '',
+      name: data.name || '',
+      icon_url: data.icon_url || '',
+      member_count: data.member_count || 0
     };
 
     return serverPreview;

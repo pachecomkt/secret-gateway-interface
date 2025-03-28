@@ -5,8 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Plus, Trash, Key, Eye, EyeOff, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { getDiscordBotTokens, saveDiscordBotToken, deleteDiscordBotToken } from "@/services/discordService";
-import { supabase } from "@/integrations/supabase/client";
+import { getDiscordBotTokens, saveDiscordBotToken, deleteDiscordBotToken } from "@/services/discordTokenService";
 
 interface BotToken {
   id: string;
@@ -73,19 +72,6 @@ export const DiscordTokenPanel = ({ onTokensChange }: DiscordTokenPanelProps) =>
     try {
       setIsLoading(true);
       setErrorMessage('');
-      
-      // Check if the user is authenticated by using auth.getUser()
-      const { data } = await supabase.auth.getUser();
-      
-      if (!data || !data.user) {
-        setErrorMessage('Você precisa estar autenticado para adicionar tokens.');
-        toast({
-          title: "Erro de Autenticação",
-          description: "Você precisa estar autenticado para adicionar tokens",
-          variant: "destructive",
-        });
-        return;
-      }
       
       const savedToken = await saveDiscordBotToken(newToken);
       

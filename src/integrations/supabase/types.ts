@@ -252,7 +252,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_groups: {
+        Args: Record<PropertyKey, never>
+        Returns: string[]
+      }
+      is_group_leader: {
+        Args: {
+          group_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

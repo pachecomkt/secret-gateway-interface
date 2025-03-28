@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Trash, Key, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { deleteDiscordBotToken } from "@/services/discordService";
+import { deleteDiscordBotToken } from "@/services/discordTokenService";
 
 interface TokenListProps {
   tokens: {

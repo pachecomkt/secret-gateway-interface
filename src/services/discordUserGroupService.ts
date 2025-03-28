@@ -2,15 +2,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { DiscordUserGroup, GroupMember } from "@/types/discord.types";
 
-// Parameters for RPC functions
-interface UserIdFromEmailParams {
-  email: string;
-}
-
-interface UserInfoFromIdParams {
-  user_id: string;
-}
-
 // Get all discord user groups
 export const getDiscordUserGroups = async (): Promise<DiscordUserGroup[]> => {
   try {
@@ -146,10 +137,10 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
     const enrichedMembers: GroupMember[] = await Promise.all(
       membersData.map(async (member) => {
         try {
-          // Call the RPC function with proper type casting
+          // Call the RPC function with proper parameter format
           const { data: userData, error: userError } = await supabase.rpc(
-            'get_user_info_from_id' as any,
-            { user_id: member.user_id } as UserInfoFromIdParams
+            'get_user_info_from_id',
+            { user_id: member.user_id }
           );
           
           if (userError) {
@@ -158,12 +149,10 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
           }
           
           if (userData) {
-            // Cast to any to safely access properties
-            const userInfo = userData as any;
             return {
               ...member,
-              user_email: userInfo.email,
-              user_name: userInfo.name
+              user_email: userData.email,
+              user_name: userData.name
             };
           }
           
@@ -207,19 +196,16 @@ export const inviteUserToGroup = async (
       throw new Error('Only group leaders can invite members');
     }
     
-    // Call RPC function with proper type casting
-    const { data: userIdData, error: userIdError } = await supabase.rpc(
-      'get_user_id_from_email' as any,
-      { email: userEmail } as UserIdFromEmailParams
+    // Call RPC function with proper parameter format
+    const { data: userId, error: userIdError } = await supabase.rpc(
+      'get_user_id_from_email',
+      { email: userEmail }
     );
     
-    if (userIdError || !userIdData) {
+    if (userIdError || !userId) {
       console.error('Error finding user by email:', userIdError);
       throw new Error('User not found with this email');
     }
-    
-    // Cast to string to ensure correct type
-    const userId = String(userIdData);
     
     // Check if user is already a member
     const { data: existingMember } = await supabase
@@ -318,16 +304,20 @@ export const isGroupLeader = async (groupId: string): Promise<boolean> => {
       return false;
     }
     
-    const { data } = await supabase
-      .from('discord_user_groups')
-      .select('*')
-      .eq('id', groupId)
-      .eq('leader_id', user.id)
-      .single();
-      
+    // Using the security definer function we created in SQL
+    const { data, error } = await supabase.rpc(
+      'is_group_leader', 
+      { group_id: groupId }
+    );
+    
+    if (error) {
+      console.error('Error checking if group leader:', error);
+      return false;
+    }
+    
     return !!data;
   } catch (error) {
-    console.error('Error checking if group leader:', error);
+    console.error('Error in isGroupLeader:', error);
     return false;
   }
 };
@@ -355,13 +345,11 @@ export const updateMemberDisplayName = async (
       throw new Error('Member not found');
     }
     
-    // Check if the user is the leader of the group
-    const { data: isLeader } = await supabase
-      .from('discord_user_groups')
-      .select('*')
-      .eq('id', member.group_id)
-      .eq('leader_id', user.id)
-      .single();
+    // Check if the user is the leader of the group using our security definer function
+    const { data: isLeader } = await supabase.rpc(
+      'is_group_leader',
+      { group_id: member.group_id }
+    );
       
     if (!isLeader) {
       throw new Error('Only group leaders can update member names');
