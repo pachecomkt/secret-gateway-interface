@@ -4,7 +4,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Key, AlertTriangle } from "lucide-react";
 import { TokenForm } from './TokenForm';
 import { TokenList } from './TokenList';
-import { getDiscordBotTokens } from "@/services/discordService";
+import { getDiscordBotTokens } from "@/services/discordTokenService";
 import { supabase } from "@/integrations/supabase/client";
 
 interface BotToken {

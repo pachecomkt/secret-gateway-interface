@@ -2,6 +2,15 @@
 import { supabase } from "@/integrations/supabase/client";
 import { DiscordUserGroup, GroupMember } from "@/types/discord.types";
 
+// Parameters for RPC functions
+interface UserIdFromEmailParams {
+  email: string;
+}
+
+interface UserInfoFromIdParams {
+  user_id: string;
+}
+
 // Get all discord user groups
 export const getDiscordUserGroups = async (): Promise<DiscordUserGroup[]> => {
   try {
@@ -116,7 +125,7 @@ export const deleteDiscordUserGroup = async (groupId: string): Promise<void> => 
 };
 
 // Get members of a Discord user group
-export const getDiscordGroupMembers = async (groupId: string): Promise<GroupMember[]> => {
+export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> => {
   try {
     // First get the basic member data
     const { data: membersData, error } = await supabase
@@ -137,10 +146,10 @@ export const getDiscordGroupMembers = async (groupId: string): Promise<GroupMemb
     const enrichedMembers: GroupMember[] = await Promise.all(
       membersData.map(async (member) => {
         try {
-          // Call the RPC function without type parameters but using 'as any'
+          // Call the RPC function with proper type casting
           const { data: userData, error: userError } = await supabase.rpc(
             'get_user_info_from_id' as any,
-            { user_id: member.user_id }
+            { user_id: member.user_id } as UserInfoFromIdParams
           );
           
           if (userError) {
@@ -168,13 +177,13 @@ export const getDiscordGroupMembers = async (groupId: string): Promise<GroupMemb
     
     return enrichedMembers;
   } catch (error) {
-    console.error('Error in getDiscordGroupMembers:', error);
+    console.error('Error in getGroupMembers:', error);
     throw error;
   }
 };
 
 // Add a member to a Discord user group by email
-export const addDiscordGroupMemberByEmail = async (
+export const inviteUserToGroup = async (
   groupId: string,
   userEmail: string,
   displayName?: string
@@ -198,10 +207,10 @@ export const addDiscordGroupMemberByEmail = async (
       throw new Error('Only group leaders can invite members');
     }
     
-    // Call RPC function without type parameters but using 'as any'
+    // Call RPC function with proper type casting
     const { data: userIdData, error: userIdError } = await supabase.rpc(
       'get_user_id_from_email' as any,
-      { email: userEmail }
+      { email: userEmail } as UserIdFromEmailParams
     );
     
     if (userIdError || !userIdData) {
@@ -245,14 +254,13 @@ export const addDiscordGroupMemberByEmail = async (
       user_email: userEmail
     };
   } catch (error) {
-    console.error('Error in addDiscordGroupMemberByEmail:', error);
+    console.error('Error in inviteUserToGroup:', error);
     throw error;
   }
 };
 
 // Remove a member from a Discord user group
-export const removeDiscordGroupMember = async (
-  groupId: string,
+export const removeGroupMember = async (
   memberId: string
 ): Promise<void> => {
   try {
@@ -262,11 +270,22 @@ export const removeDiscordGroupMember = async (
       throw new Error('User not authenticated');
     }
     
+    // Get the member to get the group_id
+    const { data: member } = await supabase
+      .from('discord_group_members')
+      .select('group_id')
+      .eq('id', memberId)
+      .single();
+      
+    if (!member) {
+      throw new Error('Member not found');
+    }
+    
     // Check if the user is the leader of the group
     const { data: group } = await supabase
       .from('discord_user_groups')
       .select('*')
-      .eq('id', groupId)
+      .eq('id', member.group_id)
       .eq('leader_id', user.id)
       .single();
       
@@ -278,15 +297,94 @@ export const removeDiscordGroupMember = async (
     const { error } = await supabase
       .from('discord_group_members')
       .delete()
-      .eq('id', memberId)
-      .eq('group_id', groupId);
+      .eq('id', memberId);
       
     if (error) {
       console.error('Error removing member:', error);
       throw error;
     }
   } catch (error) {
-    console.error('Error in removeDiscordGroupMember:', error);
+    console.error('Error in removeGroupMember:', error);
     throw error;
   }
+};
+
+// Check if current user is a group leader
+export const isGroupLeader = async (groupId: string): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      return false;
+    }
+    
+    const { data } = await supabase
+      .from('discord_user_groups')
+      .select('*')
+      .eq('id', groupId)
+      .eq('leader_id', user.id)
+      .single();
+      
+    return !!data;
+  } catch (error) {
+    console.error('Error checking if group leader:', error);
+    return false;
+  }
+};
+
+// Update member display name
+export const updateMemberDisplayName = async (
+  memberId: string,
+  displayName: string
+): Promise<void> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
+    // Get the member to get the group_id
+    const { data: member } = await supabase
+      .from('discord_group_members')
+      .select('group_id')
+      .eq('id', memberId)
+      .single();
+      
+    if (!member) {
+      throw new Error('Member not found');
+    }
+    
+    // Check if the user is the leader of the group
+    const { data: isLeader } = await supabase
+      .from('discord_user_groups')
+      .select('*')
+      .eq('id', member.group_id)
+      .eq('leader_id', user.id)
+      .single();
+      
+    if (!isLeader) {
+      throw new Error('Only group leaders can update member names');
+    }
+    
+    // Update the member
+    const { error } = await supabase
+      .from('discord_group_members')
+      .update({ display_name: displayName })
+      .eq('id', memberId);
+      
+    if (error) {
+      console.error('Error updating member name:', error);
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error in updateMemberDisplayName:', error);
+    throw error;
+  }
+};
+
+// Generate an invite link for a group
+export const generateGroupInviteLink = (groupId: string): string => {
+  const baseUrl = window.location.origin;
+  return `${baseUrl}/groups/join?id=${groupId}`;
 };

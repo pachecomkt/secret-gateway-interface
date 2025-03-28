@@ -10,6 +10,12 @@ interface ServerPreviewRpcResponse {
   member_count: number;
 }
 
+// Define parameters for the RPC function
+interface ServerPreviewParams {
+  server_id: string;
+  bot_token_id: string;
+}
+
 /**
  * Get preview information for a Discord server
  */
@@ -22,13 +28,13 @@ export const getDiscordServerPreview = async (
       throw new Error('Server ID and token ID are required');
     }
 
-    // Use parameters object and cast to 'any' to avoid TypeScript errors with RPC
+    // Cast to the correct parameter type and use 'any' for the function name
     const { data, error } = await supabase.rpc(
       'get_discord_server_preview' as any,
       {
         server_id: serverId,
         bot_token_id: tokenId
-      }
+      } as ServerPreviewParams
     );
 
     if (error) {
