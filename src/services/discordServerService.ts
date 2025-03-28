@@ -22,11 +22,14 @@ export const getDiscordServerPreview = async (
       throw new Error('Server ID and token ID are required');
     }
 
-    // Call the RPC function without type parameters and handle typing after
-    const { data, error } = await supabase.rpc('get_discord_server_preview', {
-      server_id: serverId,
-      bot_token_id: tokenId
-    });
+    // Use parameters object and cast to 'any' to avoid TypeScript errors with RPC
+    const { data, error } = await supabase.rpc(
+      'get_discord_server_preview' as any,
+      {
+        server_id: serverId,
+        bot_token_id: tokenId
+      }
+    );
 
     if (error) {
       console.error('Error fetching server preview:', error);

@@ -18,6 +18,17 @@ export const extractDiscordUsers = async (
 }> => {
   try {
     console.log('Extracting users with filters:', filters);
+    
+    // Validate required parameters
+    if (!serverId) {
+      throw new Error('Server ID is required');
+    }
+    
+    if (!tokenId) {
+      throw new Error('Bot token is required');
+    }
+    
+    // Make API call to extract users
     const response = await fetch('/api/extract-discord-users', {
       method: 'POST',
       headers: {

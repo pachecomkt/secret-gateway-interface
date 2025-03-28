@@ -1,32 +1,58 @@
-import { supabase } from '@/integrations/supabase/client';
-import { DiscordUserGroup, GroupMember } from '@/types/discord.types';
 
-// Define interfaces for RPC function results
-interface UserInfo {
-  email?: string;
-  name?: string;
-}
+import { supabase } from "@/integrations/supabase/client";
+import { DiscordUserGroup, GroupMember } from "@/types/discord.types";
 
-// Define parameter interfaces for RPC functions
-interface GetUserInfoParams {
-  user_id: string;
-}
+// Get all discord user groups
+export const getDiscordUserGroups = async (): Promise<DiscordUserGroup[]> => {
+  try {
+    // First fetch the groups
+    const { data: groups, error } = await supabase
+      .from('discord_user_groups')
+      .select('*')
+      .order('name');
+      
+    if (error) {
+      console.error('Error fetching groups:', error);
+      throw error;
+    }
+    
+    if (!groups || groups.length === 0) {
+      return [];
+    }
+    
+    // Now fetch the member count for each group
+    const groupsWithCount = await Promise.all(
+      groups.map(async (group) => {
+        const { count, error: countError } = await supabase
+          .from('discord_group_members')
+          .select('*', { count: 'exact', head: true })
+          .eq('group_id', group.id);
+          
+        if (countError) {
+          console.error(`Error counting members for group ${group.id}:`, countError);
+          return { ...group, member_count: 0 };
+        }
+        
+        return { ...group, member_count: count || 0 };
+      })
+    );
+    
+    return groupsWithCount;
+  } catch (error) {
+    console.error('Error in getDiscordUserGroups:', error);
+    throw error;
+  }
+};
 
-interface GetUserIdParams {
-  email: string;
-}
-
-/**
- * Creates a new Discord user group
- */
+// Create a new Discord user group
 export const createDiscordUserGroup = async (
-  name: string,
+  name: string, 
   description?: string
 ): Promise<DiscordUserGroup> => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     
-    if (!userData || !userData.user) {
+    if (!user) {
       throw new Error('User not authenticated');
     }
     
@@ -35,24 +61,15 @@ export const createDiscordUserGroup = async (
       .insert({
         name,
         description,
-        leader_id: userData.user.id
+        leader_id: user.id
       })
       .select()
       .single();
-    
+      
     if (error) {
       console.error('Error creating group:', error);
-      throw new Error(error.message);
+      throw error;
     }
-    
-    // Add the creator as the first member automatically
-    await supabase
-      .from('discord_group_members')
-      .insert({
-        group_id: data.id,
-        user_id: userData.user.id,
-        display_name: 'Group Leader' // Default name for the leader
-      });
     
     return data;
   } catch (error) {
@@ -61,96 +78,73 @@ export const createDiscordUserGroup = async (
   }
 };
 
-/**
- * Gets all Discord user groups for the current user
- */
-export const getDiscordUserGroups = async (): Promise<DiscordUserGroup[]> => {
+// Delete a Discord user group
+export const deleteDiscordUserGroup = async (groupId: string): Promise<void> => {
   try {
-    const { data, error } = await supabase
-      .from('discord_user_groups')
-      .select('*');
-      
-    if (error) {
-      console.error('Error fetching groups:', error);
-      throw new Error(error.message);
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('User not authenticated');
     }
     
-    // Enhance with member count
-    const enhancedGroups = await Promise.all(data.map(async (group) => {
-      const { count } = await supabase
-        .from('discord_group_members')
-        .select('*', { count: 'exact', head: true })
-        .eq('group_id', group.id);
-        
-      return {
-        ...group,
-        member_count: count || 0
-      };
-    }));
+    // Check if the user is the leader of the group
+    const { data: group } = await supabase
+      .from('discord_user_groups')
+      .select('*')
+      .eq('id', groupId)
+      .eq('leader_id', user.id)
+      .single();
+      
+    if (!group) {
+      throw new Error('You are not authorized to delete this group');
+    }
     
-    return enhancedGroups;
+    // Delete the group (members will be automatically deleted due to CASCADE)
+    const { error } = await supabase
+      .from('discord_user_groups')
+      .delete()
+      .eq('id', groupId);
+      
+    if (error) {
+      console.error('Error deleting group:', error);
+      throw error;
+    }
   } catch (error) {
-    console.error('Error in getDiscordUserGroups:', error);
+    console.error('Error in deleteDiscordUserGroup:', error);
     throw error;
   }
 };
 
-/**
- * Checks if the current user is the leader of a group
- */
-export const isGroupLeader = async (groupId: string): Promise<boolean> => {
+// Get members of a Discord user group
+export const getDiscordGroupMembers = async (groupId: string): Promise<GroupMember[]> => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
-    
-    if (!userData || !userData.user) {
-      return false;
-    }
-    
-    const { data, error } = await supabase
-      .from('discord_user_groups')
-      .select('*')
-      .eq('id', groupId)
-      .eq('leader_id', userData.user.id)
-      .maybeSingle();
-      
-    if (error) {
-      console.error('Error checking group leadership:', error);
-      return false;
-    }
-    
-    return !!data;
-  } catch (error) {
-    console.error('Error in isGroupLeader:', error);
-    return false;
-  }
-};
-
-/**
- * Gets members of a Discord user group
- */
-export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> => {
-  try {
-    const { data: membersData, error: membersError } = await supabase
+    // First get the basic member data
+    const { data: membersData, error } = await supabase
       .from('discord_group_members')
       .select('*')
       .eq('group_id', groupId);
       
-    if (membersError) {
-      console.error('Error fetching group members:', membersError);
-      throw new Error(membersError.message);
+    if (error) {
+      console.error('Error fetching group members:', error);
+      throw error;
     }
     
+    if (!membersData || membersData.length === 0) {
+      return [];
+    }
+    
+    // Enrich with user information
     const enrichedMembers: GroupMember[] = await Promise.all(
       membersData.map(async (member) => {
         try {
-          // Call the RPC function without type parameters
+          // Call the RPC function without type parameters but using 'as any'
           const { data: userData, error: userError } = await supabase.rpc(
-            'get_user_info_from_id',
+            'get_user_info_from_id' as any,
             { user_id: member.user_id }
           );
           
           if (userError) {
-            console.error('Error fetching user details:', userError);
+            console.error(`Error getting user info for ${member.user_id}:`, userError);
             return member;
           }
           
@@ -165,8 +159,8 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
           }
           
           return member;
-        } catch (userError) {
-          console.error('Error fetching user details:', userError);
+        } catch (error) {
+          console.error(`Error enriching member ${member.id}:`, error);
           return member;
         }
       })
@@ -174,29 +168,39 @@ export const getGroupMembers = async (groupId: string): Promise<GroupMember[]> =
     
     return enrichedMembers;
   } catch (error) {
-    console.error('Error in getGroupMembers:', error);
+    console.error('Error in getDiscordGroupMembers:', error);
     throw error;
   }
 };
 
-/**
- * Invites a user to a Discord group using their email
- */
-export const inviteUserToGroup = async (
+// Add a member to a Discord user group by email
+export const addDiscordGroupMemberByEmail = async (
   groupId: string,
   userEmail: string,
   displayName?: string
 ): Promise<GroupMember> => {
   try {
-    // Check if user is group leader
-    const isLeader = await isGroupLeader(groupId);
-    if (!isLeader) {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
+    // Check if the user is the leader of the group
+    const { data: group } = await supabase
+      .from('discord_user_groups')
+      .select('*')
+      .eq('id', groupId)
+      .eq('leader_id', user.id)
+      .single();
+      
+    if (!group) {
       throw new Error('Only group leaders can invite members');
     }
     
-    // Call RPC function without type parameters
+    // Call RPC function without type parameters but using 'as any'
     const { data: userIdData, error: userIdError } = await supabase.rpc(
-      'get_user_id_from_email',
+      'get_user_id_from_email' as any,
       { email: userEmail }
     );
     
@@ -220,8 +224,8 @@ export const inviteUserToGroup = async (
       throw new Error('User is already a member of this group');
     }
     
-    // Add user to group
-    const { data: memberData, error: memberError } = await supabase
+    // Add the member
+    const { data: newMember, error: insertError } = await supabase
       .from('discord_group_members')
       .insert({
         group_id: groupId,
@@ -231,213 +235,58 @@ export const inviteUserToGroup = async (
       .select()
       .single();
       
-    if (memberError) {
-      console.error('Error adding user to group:', memberError);
-      throw new Error(memberError.message);
+    if (insertError) {
+      console.error('Error adding member:', insertError);
+      throw insertError;
     }
     
-    return memberData;
+    return {
+      ...newMember,
+      user_email: userEmail
+    };
   } catch (error) {
-    console.error('Error in inviteUserToGroup:', error);
+    console.error('Error in addDiscordGroupMemberByEmail:', error);
     throw error;
   }
 };
 
-/**
- * Updates a group member's display name
- */
-export const updateMemberDisplayName = async (
-  memberId: string,
-  displayName: string
-): Promise<GroupMember> => {
+// Remove a member from a Discord user group
+export const removeDiscordGroupMember = async (
+  groupId: string,
+  memberId: string
+): Promise<void> => {
   try {
-    // Get the group ID for this member to check leadership
-    const { data: memberData } = await supabase
-      .from('discord_group_members')
-      .select('group_id')
-      .eq('id', memberId)
-      .single();
-      
-    if (!memberData) {
-      throw new Error('Member not found');
-    }
+    const { data: { user } } = await supabase.auth.getUser();
     
-    // Check if user is group leader
-    const isLeader = await isGroupLeader(memberData.group_id);
-    if (!isLeader) {
-      throw new Error('Only group leaders can update member names');
-    }
-    
-    // Update the display name
-    const { data: updatedMember, error: updateError } = await supabase
-      .from('discord_group_members')
-      .update({ display_name: displayName })
-      .eq('id', memberId)
-      .select()
-      .single();
-      
-    if (updateError) {
-      console.error('Error updating member display name:', updateError);
-      throw new Error(updateError.message);
-    }
-    
-    return updatedMember;
-  } catch (error) {
-    console.error('Error in updateMemberDisplayName:', error);
-    throw error;
-  }
-};
-
-/**
- * Removes a member from a group
- */
-export const removeGroupMember = async (memberId: string): Promise<void> => {
-  try {
-    // Get the group ID for this member to check leadership
-    const { data: memberData } = await supabase
-      .from('discord_group_members')
-      .select('group_id, user_id')
-      .eq('id', memberId)
-      .single();
-      
-    if (!memberData) {
-      throw new Error('Member not found');
-    }
-    
-    // Get current user
-    const { data: userData } = await supabase.auth.getUser();
-    
-    if (!userData || !userData.user) {
+    if (!user) {
       throw new Error('User not authenticated');
     }
     
-    // Check if user is the group leader or the member removing themselves
-    const isLeader = await isGroupLeader(memberData.group_id);
-    const isSelf = memberData.user_id === userData.user.id;
-    
-    if (!isLeader && !isSelf) {
-      throw new Error('Only group leaders can remove members, or members can remove themselves');
-    }
-    
-    // Remove the member
-    const { error: deleteError } = await supabase
-      .from('discord_group_members')
-      .delete()
-      .eq('id', memberId);
-      
-    if (deleteError) {
-      console.error('Error removing group member:', deleteError);
-      throw new Error(deleteError.message);
-    }
-  } catch (error) {
-    console.error('Error in removeGroupMember:', error);
-    throw error;
-  }
-};
-
-/**
- * Generates an invite link for a group
- */
-export const generateGroupInviteLink = (groupId: string): string => {
-  // This is a simple implementation - in a production app you might
-  // want to generate a secure token or use a shorter ID
-  return `${window.location.origin}/invite/${groupId}`;
-};
-
-/**
- * Joins a group using an invite link (groupId)
- */
-export const joinGroupByInvite = async (
-  groupId: string, 
-  displayName?: string
-): Promise<GroupMember> => {
-  try {
-    const { data: userData } = await supabase.auth.getUser();
-    
-    if (!userData || !userData.user) {
-      throw new Error('User not authenticated');
-    }
-    
-    // Check if the group exists
-    const { data: groupData } = await supabase
+    // Check if the user is the leader of the group
+    const { data: group } = await supabase
       .from('discord_user_groups')
       .select('*')
       .eq('id', groupId)
+      .eq('leader_id', user.id)
       .single();
       
-    if (!groupData) {
-      throw new Error('Group not found');
+    if (!group) {
+      throw new Error('Only group leaders can remove members');
     }
     
-    // Check if user is already a member
-    const { data: existingMember } = await supabase
-      .from('discord_group_members')
-      .select('*')
-      .eq('group_id', groupId)
-      .eq('user_id', userData.user.id)
-      .maybeSingle();
-      
-    if (existingMember) {
-      throw new Error('You are already a member of this group');
-    }
-    
-    // Add user to group
-    const { data: memberData, error: memberError } = await supabase
-      .from('discord_group_members')
-      .insert({
-        group_id: groupId,
-        user_id: userData.user.id,
-        display_name: displayName || 'Member'
-      })
-      .select()
-      .single();
-      
-    if (memberError) {
-      console.error('Error joining group:', memberError);
-      throw new Error(memberError.message);
-    }
-    
-    return memberData;
-  } catch (error) {
-    console.error('Error in joinGroupByInvite:', error);
-    throw error;
-  }
-};
-
-/**
- * Deletes a user group if the current user is the leader
- */
-export const deleteDiscordUserGroup = async (groupId: string): Promise<void> => {
-  try {
-    // Check if user is the group leader
-    const isLeader = await isGroupLeader(groupId);
-    if (!isLeader) {
-      throw new Error('Only group leaders can delete groups');
-    }
-    
-    // Delete all members first
-    const { error: membersError } = await supabase
+    // Remove the member
+    const { error } = await supabase
       .from('discord_group_members')
       .delete()
+      .eq('id', memberId)
       .eq('group_id', groupId);
       
-    if (membersError) {
-      console.error('Error deleting group members:', membersError);
-      throw new Error('Failed to delete group members');
-    }
-    
-    // Delete the group
-    const { error: groupError } = await supabase
-      .from('discord_user_groups')
-      .delete()
-      .eq('id', groupId);
-      
-    if (groupError) {
-      console.error('Error deleting group:', groupError);
-      throw new Error('Failed to delete group');
+    if (error) {
+      console.error('Error removing member:', error);
+      throw error;
     }
   } catch (error) {
-    console.error('Error in deleteDiscordUserGroup:', error);
+    console.error('Error in removeDiscordGroupMember:', error);
     throw error;
   }
 };

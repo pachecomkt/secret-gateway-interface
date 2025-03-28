@@ -19,7 +19,6 @@ interface DiscordExtractPanelProps {
 export const DiscordExtractPanel = ({ tokenId, onUsersExtracted }: DiscordExtractPanelProps) => {
   const [serverId, setServerId] = useState('');
   const [listName, setListName] = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
   const [roleIdFilter, setRoleIdFilter] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
   const [filters, setFilters] = useState<UserFilter>({
@@ -64,10 +63,9 @@ export const DiscordExtractPanel = ({ tokenId, onUsersExtracted }: DiscordExtrac
       // Generate a default list name if not provided
       const extractListName = listName || `Lista do servidor ${serverId}`;
       
-      // Apply role filters if provided
+      // Apply role ID filter if provided
       const updatedFilters = {
         ...filters,
-        role: roleFilter || null,
         roleId: roleIdFilter || null
       };
       
@@ -86,13 +84,14 @@ export const DiscordExtractPanel = ({ tokenId, onUsersExtracted }: DiscordExtrac
       
       toast({
         title: "Sucesso",
-        description: `${result.users.length} usuários extraídos com sucesso!`,
+        description: `${result.users?.length || 0} usuários extraídos com sucesso!`,
       });
       
-      onUsersExtracted(result.listId, result.users);
+      if (result.users && result.listId) {
+        onUsersExtracted(result.listId, result.users);
+      }
       
       // Limpar campos após sucesso
-      setServerId('');
       setListName('');
       
     } catch (error) {
@@ -150,24 +149,12 @@ export const DiscordExtractPanel = ({ tokenId, onUsersExtracted }: DiscordExtrac
               <h4 className="font-medium">Filtros</h4>
             </div>
             
-            <div className="space-y-3">
-              {/* Filtro por cargo */}
+            <div className="space-y-3">              
               <div>
-                <Label htmlFor="role-filter">Filtrar por Cargo (opcional)</Label>
-                <Input
-                  id="role-filter"
-                  placeholder="Nome do cargo (ex: Administrador)"
-                  value={roleFilter}
-                  onChange={(e) => setRoleFilter(e.target.value)}
-                  className="bg-secondary/50 mt-1"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="role-id-filter">ID do Cargo (opcional)</Label>
+                <Label htmlFor="role-id-filter">ID do Cargo</Label>
                 <Input
                   id="role-id-filter"
-                  placeholder="ID do cargo específico"
+                  placeholder="ID do cargo específico para filtrar membros"
                   value={roleIdFilter}
                   onChange={(e) => setRoleIdFilter(e.target.value)}
                   className="bg-secondary/50 mt-1"
